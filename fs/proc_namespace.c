@@ -11,6 +11,9 @@
 #include <linux/security.h>
 #include <linux/fs_struct.h>
 #include "proc/internal.h" /* only for get_proc_task() in ->open() */
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+#include <linux/susfs_def.h>
+#endif
 
 #include "pnode.h"
 #include "internal.h"
@@ -99,6 +102,11 @@ static int show_vfsmnt(struct seq_file *m, struct vfsmount *mnt)
 	struct path mnt_path = { .dentry = mnt->mnt_root, .mnt = mnt };
 	struct super_block *sb = mnt_path.dentry->d_sb;
 
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+	if (unlikely(r->mnt_id >= DEFAULT_SUS_MNT_ID))
+		return 0;
+#endif
+
 	if (sb->s_op->show_devname) {
 		err = sb->s_op->show_devname(m, mnt_path.dentry);
 		if (err)
@@ -135,6 +143,10 @@ static int show_mountinfo(struct seq_file *m, struct vfsmount *mnt)
 	struct path mnt_path = { .dentry = mnt->mnt_root, .mnt = mnt };
 	int err = 0;
 
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+	if (unlikely(r->mnt_id >= DEFAULT_SUS_MNT_ID))
+		return 0;
+#endif
 	seq_printf(m, "%i %i %u:%u ", r->mnt_id, r->mnt_parent->mnt_id,
 		   MAJOR(sb->s_dev), MINOR(sb->s_dev));
 	if (sb->s_op->show_path)
@@ -170,6 +182,7 @@ static int show_mountinfo(struct seq_file *m, struct vfsmount *mnt)
 	seq_puts(m, " - ");
 	show_type(m, sb);
 	seq_putc(m, ' ');
+
 	if (sb->s_op->show_devname)
 		err = sb->s_op->show_devname(m, mnt->mnt_root);
 	else
@@ -198,6 +211,11 @@ static int show_vfsstat(struct seq_file *m, struct vfsmount *mnt)
 	int err = 0;
 
 	/* device */
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+	if (unlikely(r->mnt_id >= DEFAULT_SUS_MNT_ID))
+		return 0;
+#endif
+
 	if (sb->s_op->show_devname) {
 		seq_puts(m, "device ");
 		err = sb->s_op->show_devname(m, mnt_path.dentry);
