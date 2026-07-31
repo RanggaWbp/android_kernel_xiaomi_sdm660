@@ -125,3 +125,4 @@ Android.bp
 # Build outputs
 out_*/
 build_*.log
+KernelSU/.git/
