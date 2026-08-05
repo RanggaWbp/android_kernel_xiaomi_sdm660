@@ -37,7 +37,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y bc bison flex libssl-dev libelf-dev \
-            build-essential python3 python3-pip zip curl git
+            build-essential python3 python3-pip zip curl git libdebuginfod1
 
       - name: Cache toolchain
         id: cache-toolchain
@@ -52,6 +52,17 @@ jobs:
           mkdir -p toolchains
           git clone --depth=1 https://github.com/mvaisakh/gcc-arm64.git toolchains/gcc64
           git clone --depth=1 https://github.com/mvaisakh/gcc-arm.git toolchains/gcc32
+
+      - name: Initialize KernelSU as a local git repo
+        run: |
+          # The KernelSU source is embedded directly (not as a submodule) and
+          # its own .git/ is gitignored, but drivers/kernelsu/Kbuild requires
+          # a .git directory to exist inside KernelSU/ to compute a version
+          # number and pass its "is this a proper submodule" sanity check.
+          cd KernelSU
+          git init -q
+          git add -A
+          git -c user.email="ci@local" -c user.name="ci" commit -q -m "snapshot for build"
 
       - name: Build kernel
         run: |
@@ -80,7 +91,7 @@ jobs:
           cat > anykernel.sh << EOF
           ### AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=ReSukiSU Kernel for ${{ matrix.device }} by RanggaWbp
+          kernel.string=ReSukiSU Support Kernel for ${{ matrix.device }} by RanggaWbp
           do.devicecheck=1
           do.modules=0
           do.systemless=1
@@ -126,15 +137,6 @@ jobs:
           name: ${{ matrix.device }}-build-log
           path: build.log
           retention-days: 7
-
-      - name: Save zip path for release job
-        run: echo "${{ env.ZIP_NAME }}" >> zip-name.txt
-
-      - name: Upload zip name
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.device }}-zip-name
-          path: zip-name.txt
 
   release:
     name: Create GitHub Release
