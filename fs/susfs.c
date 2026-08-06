@@ -954,12 +954,40 @@ void susfs_enable_log(void __user *arg) {
 void susfs_add_sus_map(void __user *arg) {
 	/* not implemented in this kernel version */
 }
+struct st_susfs_enabled_features_reply {
+	char enabled_features[SUSFS_ENABLED_FEATURES_SIZE];
+	int err;
+};
+struct st_susfs_variant_reply {
+	char susfs_variant[SUSFS_MAX_VARIANT_BUFSIZE];
+	int err;
+};
+struct st_susfs_version_reply {
+	char susfs_version[SUSFS_MAX_VERSION_BUFSIZE];
+	int err;
+};
 void susfs_get_enabled_features(void __user *arg) {
-	/* not implemented in this kernel version */
+	struct st_susfs_enabled_features_reply reply;
+	memset(&reply, 0, sizeof(reply));
+	snprintf(reply.enabled_features, SUSFS_ENABLED_FEATURES_SIZE,
+		"sus_path\nsus_mount\nsus_kstat\nspoof_uname\nspoof_cmdline_or_bootconfig\nopen_redirect\ntry_umount\nenable_log\n");
+	reply.err = 0;
+	if (copy_to_user((void __user *)arg, &reply, sizeof(reply)))
+		SUSFS_LOGE("failed copying enabled_features back to userspace.\n");
 }
 void susfs_show_variant(void __user *arg) {
-	/* not implemented in this kernel version */
+	struct st_susfs_variant_reply reply;
+	memset(&reply, 0, sizeof(reply));
+	snprintf(reply.susfs_variant, SUSFS_MAX_VARIANT_BUFSIZE, "Non-GKI");
+	reply.err = 0;
+	if (copy_to_user((void __user *)arg, &reply, sizeof(reply)))
+		SUSFS_LOGE("failed copying variant back to userspace.\n");
 }
 void susfs_show_version(void __user *arg) {
-	/* not implemented in this kernel version */
+	struct st_susfs_version_reply reply;
+	memset(&reply, 0, sizeof(reply));
+	snprintf(reply.susfs_version, SUSFS_MAX_VERSION_BUFSIZE, SUSFS_VERSION);
+	reply.err = 0;
+	if (copy_to_user((void __user *)arg, &reply, sizeof(reply)))
+		SUSFS_LOGE("failed copying version back to userspace.\n");
 }
