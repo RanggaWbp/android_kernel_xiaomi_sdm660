@@ -681,6 +681,10 @@ int susfs_set_uname(struct st_susfs_uname* __user user_info) {
 	spin_unlock(&susfs_uname_spin_lock);
 	SUSFS_LOGI("setting spoofed release: '%s', version: '%s'\n",
 				my_uname.release, my_uname.version);
+	info.err = 0;
+	if (copy_to_user(&user_info->err, &info.err, sizeof(info.err))) {
+		SUSFS_LOGE("failed copying err back to userspace.\n");
+	}
 	return 0;
 }
 

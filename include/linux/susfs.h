@@ -96,6 +96,7 @@ struct st_susfs_try_umount_list {
 struct st_susfs_uname {
 	char        release[__NEW_UTS_LEN+1];
 	char        version[__NEW_UTS_LEN+1];
+	int         err;
 };
 #endif
 
