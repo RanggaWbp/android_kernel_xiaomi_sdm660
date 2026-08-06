@@ -6,6 +6,9 @@ on:
       - "v*"
   workflow_dispatch: # allows manual trigger from the Actions tab too
 
+permissions:
+  contents: write # required so softprops/action-gh-release can create/update releases
+
 jobs:
   build:
     name: Build ${{ matrix.device }}
