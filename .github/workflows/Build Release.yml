@@ -20,9 +20,11 @@ jobs:
           - device: wayne
             defconfig: wayne_defconfig
             display_name: "Mi 6X"
+            model_prefix: "MI6X"
           - device: jasmine
             defconfig: jasmine-stock_defconfig
             display_name: "Mi A2"
+            model_prefix: "MIA2"
 
     steps:
       - name: Checkout kernel source
@@ -122,7 +124,8 @@ jobs:
           write_boot;
           EOF
           TAG_NAME="${GITHUB_REF_NAME}"
-          ZIP_NAME="ReSukiSU-SUSFS-${{ matrix.device }}-${TAG_NAME}.zip"
+          BUILD_DATE="$(date +'%d-%m-%Y')"
+          ZIP_NAME="${{ matrix.model_prefix }}-ReSukiSU-SUSFS-${{ matrix.device }}-${TAG_NAME}-${BUILD_DATE}.zip"
           zip -r9 "../${ZIP_NAME}" . -x ".git/*" ".github/*" "*.md"
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
