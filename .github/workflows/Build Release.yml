@@ -21,10 +21,14 @@ jobs:
             defconfig: wayne_defconfig
             display_name: "Mi 6X"
             model_prefix: "MI6X"
+            device_name2: ""
+            is_slot_device: "0"
           - device: jasmine
             defconfig: jasmine-stock_defconfig
             display_name: "Mi A2"
             model_prefix: "MIA2"
+            device_name2: "jasmine_sprout"
+            is_slot_device: "1"
 
     steps:
       - name: Checkout kernel source
@@ -103,7 +107,7 @@ jobs:
           do.cleanup=1
           do.cleanuponabort=0
           device.name1=${{ matrix.device }}
-          device.name2=
+          device.name2=${{ matrix.device_name2 }}
           device.name3=
           device.name4=
           device.name5=
@@ -116,7 +120,7 @@ jobs:
           set_perm_recursive 0 0 750 750 \$RAMDISK/init* \$RAMDISK/sbin;
           }
           BLOCK=/dev/block/bootdevice/by-name/boot;
-          IS_SLOT_DEVICE=0;
+          IS_SLOT_DEVICE=${{ matrix.is_slot_device }};
           RAMDISK_COMPRESSION=auto;
           PATCH_VBMETA_FLAG=auto;
           . tools/ak3-core.sh;
@@ -167,7 +171,7 @@ jobs:
           body: |
             Automated build for tag `${{ github.ref_name }}`.
 
-            Devices: wayne (Mi 6X), jasmine (Mi A2)
+            Devices: wayne (Mi 6X), jasmine_sprout (Mi A2)
 
             See commit history for changelog.
           draft: false
