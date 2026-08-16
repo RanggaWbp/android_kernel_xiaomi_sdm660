@@ -23,11 +23,11 @@ jobs:
             model_prefix: "MI6X"
             device_name2: ""
             is_slot_device: "0"
-          - device: jasmine
+          - device: jasmine_sprout
             defconfig: jasmine-stock_defconfig
             display_name: "Mi A2"
             model_prefix: "MIA2"
-            device_name2: "jasmine_sprout"
+            device_name2: "jasmine"
             is_slot_device: "1"
 
     steps:
@@ -172,6 +172,13 @@ jobs:
             Automated build for tag `${{ github.ref_name }}`.
 
             Devices: wayne (Mi 6X), jasmine_sprout (Mi A2)
+
+            jasmine_sprout build is EXPERIMENTAL / not yet hardware-validated.
+            Its device tree reuses wayne's base hardware config with only
+            panel brightness overrides on top — some real Mi A2 units may
+            experience display issues (seen in early testing: corrupted
+            recovery-mode display on at least one unit). Flash at your own
+            risk and keep a boot backup ready.
 
             See commit history for changelog.
           draft: false
