@@ -1,0 +1,48 @@
+diff --git a/drivers/clk/qcom/clk-cpu-osm.c b/drivers/clk/qcom/clk-cpu-osm.c
+index 68f4afde..b0aa8160 100644
+--- a/drivers/clk/qcom/clk-cpu-osm.c
++++ b/drivers/clk/qcom/clk-cpu-osm.c
+@@ -3193,6 +3193,26 @@ static int clk_cpu_osm_driver_probe(struct platform_device *pdev)
+ 			 "qcom,pwrcl-speedbin%d-v%d", speedbin, pvs_ver);
+ 	}
+ 
++	/*
++	 * OC OVERRIDE (opt-in only, NOT enabled by any normal/baseline build):
++	 * If "qcom,pwrcl-force-speedbin" is present in the board DT, use that
++	 * speed-bin's LUT instead of the one indicated by the efuse. This
++	 * forces a LUT/voltage-corner table that was calibrated for a
++	 * DIFFERENT (better-binned) unit of silicon than the one physically
++	 * present. It is provided ONLY for opt-in, source-based OC profiles
++	 * (see configs/*/oc_*.conf) and is a HIGH-RISK CROSS-BIN operation:
++	 * it does not add any new frequency/voltage point, it only picks a
++	 * different, already-existing table.
++	 */
++	if (!of_property_read_u32(pdev->dev.of_node,
++				   "qcom,pwrcl-force-speedbin", &speedbin)) {
++		dev_warn(&pdev->dev,
++			 "OC OVERRIDE: forcing pwrcl speed-bin %d (efuse override, HIGH RISK)\n",
++			 speedbin);
++		snprintf(pwrclspeedbinstr, ARRAY_SIZE(pwrclspeedbinstr),
++			 "qcom,pwrcl-speedbin%d-v%d", speedbin, pvs_ver);
++	}
++
+ 	dev_info(&pdev->dev, "using pwrcl speed bin %u and pvs_ver %d\n",
+ 		 speedbin, pvs_ver);
+ 
+@@ -3212,6 +3232,16 @@ static int clk_cpu_osm_driver_probe(struct platform_device *pdev)
+ 			 "qcom,perfcl-speedbin%d-v%d", speedbin, pvs_ver);
+ 	}
+ 
++	/* OC OVERRIDE (opt-in only) — see comment above for pwrcl. */
++	if (!of_property_read_u32(pdev->dev.of_node,
++				   "qcom,perfcl-force-speedbin", &speedbin)) {
++		dev_warn(&pdev->dev,
++			 "OC OVERRIDE: forcing perfcl speed-bin %d (efuse override, HIGH RISK)\n",
++			 speedbin);
++		snprintf(perfclspeedbinstr, ARRAY_SIZE(perfclspeedbinstr),
++			 "qcom,perfcl-speedbin%d-v%d", speedbin, pvs_ver);
++	}
++
+ 	dev_info(&pdev->dev, "using perfcl speed bin %u and pvs_ver %d\n",
+ 		 speedbin, pvs_ver);
+ 
