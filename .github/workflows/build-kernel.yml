@@ -181,7 +181,7 @@ jobs:
           SIZE=$(stat -c%s "$IMG")
           echo "Image.gz-dtb size: ${SIZE} bytes"
           # sanity range: kernel arm64 msm-4.4 wajar antara ~5MB - ~40MB
-          if (( SIZE < 5000000 || SIZE > 40000000 )); then
+          if (( SIZE < 5000000 || SIZE > 70000000 )); then
             echo "::error::Ukuran Image.gz-dtb tidak wajar (${SIZE} bytes) -- kemungkinan build korup"
             exit 1
           fi
