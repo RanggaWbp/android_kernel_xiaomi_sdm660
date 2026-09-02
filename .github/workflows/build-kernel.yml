@@ -25,7 +25,7 @@ jobs:
       fail-fast: false
       matrix:
         device: [mi6x, mia2]
-        profile: [normal, oc_balanced, oc_performance, oc_extreme]
+        profile: [normal, oc_balanced, oc_performance, oc_extreme, oc_cpu_only]
         include:
           # device-specific constants -- dipakai buat AnyKernel3 properties()
           - device: mi6x
@@ -42,7 +42,10 @@ jobs:
             is_slot_device: "1"
     env:
       CONF_FILE: configs/${{ matrix.device }}/${{ matrix.profile }}.conf
-      ARTIFACT_NAME: kernel-${{ matrix.device }}-${{ matrix.profile == 'normal' && 'normal' || format('{0}-oc', matrix.profile) }}
+      # ARTIFACT_NAME TIDAK dihitung dari format string di sini (rawan bug --
+      # sempat salah: "oc_balanced-oc" vs seharusnya "balanced-oc"). Diambil
+      # langsung dari isi file conf di step "Validate OC config" di bawah,
+      # supaya file conf tetap satu-satunya source of truth.
 
     steps:
       # ---------------------------------------------------------------
@@ -63,6 +66,15 @@ jobs:
         run: |
           chmod +x scripts/validate_oc_config.sh scripts/apply_oc_overrides.sh
           bash scripts/validate_oc_config.sh "${{ env.CONF_FILE }}"
+
+      - name: Read ARTIFACT_NAME from conf (single source of truth)
+        run: |
+          NAME="$(grep -E '^ARTIFACT_NAME=' "oc-config/${{ env.CONF_FILE }}" | cut -d= -f2)"
+          if [[ -z "$NAME" ]]; then
+            echo "::error::ARTIFACT_NAME tidak ditemukan di ${{ env.CONF_FILE }}"
+            exit 1
+          fi
+          echo "ARTIFACT_NAME=${NAME}" >> "$GITHUB_ENV"
 
       # ---------------------------------------------------------------
       # 3. Checkout KERNEL SOURCE ke folder terpisah
@@ -181,7 +193,7 @@ jobs:
           SIZE=$(stat -c%s "$IMG")
           echo "Image.gz-dtb size: ${SIZE} bytes"
           # sanity range: kernel arm64 msm-4.4 wajar antara ~5MB - ~40MB
-          if (( SIZE < 5000000 || SIZE > 70000000 )); then
+          if (( SIZE < 5000000 || SIZE > 40000000 )); then
             echo "::error::Ukuran Image.gz-dtb tidak wajar (${SIZE} bytes) -- kemungkinan build korup"
             exit 1
           fi

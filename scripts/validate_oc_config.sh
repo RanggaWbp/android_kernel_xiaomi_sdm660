@@ -54,7 +54,7 @@ fi
 
 # --- 3. Profile valid ---
 case "$PROFILE" in
-    normal|oc_balanced|oc_performance|oc_extreme) ;;
+    normal|oc_balanced|oc_performance|oc_extreme|oc_cpu_only) ;;
     *) fail "PROFILE tidak dikenal: '$PROFILE'" ;;
 esac
 
