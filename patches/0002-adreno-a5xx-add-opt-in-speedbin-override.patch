@@ -1,5 +1,5 @@
 diff --git a/drivers/gpu/msm/adreno_a5xx.c b/drivers/gpu/msm/adreno_a5xx.c
-index 2514d13b..593f16d4 100644
+index 2514d13b..b7050132 100644
 --- a/drivers/gpu/msm/adreno_a5xx.c
 +++ b/drivers/gpu/msm/adreno_a5xx.c
 @@ -144,6 +144,7 @@ static void a530_efuse_speed_bin(struct adreno_device *adreno_dev)
@@ -24,7 +24,7 @@ index 2514d13b..593f16d4 100644
 +	 * than the one the physical silicon actually reports. This is a
 +	 * HIGH-RISK CROSS-BIN operation: no new frequency/voltage point is
 +	 * added, an existing table calibrated for other silicon is simply
-+	 * selected instead. See configs/*/oc_*.conf for opt-in usage.
++	 * selected instead. See the oc_*.conf files under configs/ for opt-in usage.
 +	 */
 +	if (!of_property_read_u32(device->pdev->dev.of_node,
 +			"qcom,gpu-force-speed-bin", &force_bin)) {

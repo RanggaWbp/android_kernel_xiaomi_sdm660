@@ -1,5 +1,5 @@
 diff --git a/drivers/clk/qcom/clk-cpu-osm.c b/drivers/clk/qcom/clk-cpu-osm.c
-index 68f4afde..b0aa8160 100644
+index 68f4afde..9ce3a18e 100644
 --- a/drivers/clk/qcom/clk-cpu-osm.c
 +++ b/drivers/clk/qcom/clk-cpu-osm.c
 @@ -3193,6 +3193,26 @@ static int clk_cpu_osm_driver_probe(struct platform_device *pdev)
@@ -13,7 +13,7 @@ index 68f4afde..b0aa8160 100644
 +	 * forces a LUT/voltage-corner table that was calibrated for a
 +	 * DIFFERENT (better-binned) unit of silicon than the one physically
 +	 * present. It is provided ONLY for opt-in, source-based OC profiles
-+	 * (see configs/*/oc_*.conf) and is a HIGH-RISK CROSS-BIN operation:
++	 * (see the oc_*.conf files under configs/) and is a HIGH-RISK CROSS-BIN operation:
 +	 * it does not add any new frequency/voltage point, it only picks a
 +	 * different, already-existing table.
 +	 */

@@ -1,6 +1,27 @@
 # CHANGELOG
 
-## [Belum dirilis] — Update setelah pengujian hardware nyata
+## [Belum dirilis] — Perbaikan CRITICAL: patch tidak bisa compile sama sekali
+
+### Bug (parah, ditemukan dari log GitHub Actions run pertama)
+
+**Kedua patch (`0001` dan `0002`) gagal compile untuk SEMUA profile OC** (bukan cuma satu). Penyebab: komentar C yang saya tulis berisi teks `configs/*/oc_*.conf` — teks ini mengandung `*/` (penutup komentar C) di tengah kalimat, sehingga komentar `/* ... */` tertutup lebih awal dan sisa teksnya dibaca compiler sebagai kode sungguhan:
+
+```
+../drivers/gpu/msm/adreno_a5xx.c:167:44: error: unknown type name 'oc_'
+```
+
+Ini murni salah ketik struktural saya sendiri (typo komentar), **bukan** masalah OC/hardware. Karena `oc_balanced` (dan seharusnya `oc_performance`, `oc_extreme`, `oc_cpu_only` juga — semua yang apply patch 0002 dan/atau 0001) gagal di tahap COMPILE, bukan boot — **semua reboot random yang dilaporkan sebelumnya sebenarnya tidak pernah teruji di kernel yang benar-benar berisi patch OC ini.**
+
+### Yang ini ubah dari analisis sebelumnya
+
+Analisis crash log GPU hang (bagian di atas) tetap valid — itu dari APK/zip yang di-build manual sebelum ada CI, memakai versi patch yang mungkin berbeda. Tapi status `HARDWARE_TESTED_RESULT=FAILED_RANDOM_REBOOT` di 6 file config perlu ditinjau ulang: perlu dikonfirmasi apakah kernel yang benar-benar di-flash saat itu memang mengandung patch yang identik dengan yang di-commit sekarang (ada kemungkinan versi manual berbeda dari versi CI). **Rekomendasi: uji ulang dari awal begitu CI berhasil compile dengan bersih**, jangan asumsikan hasil test lama masih berlaku 1:1 untuk artifact CI.
+
+### Diperbaiki
+- `patches/0001-clk-cpu-osm-add-opt-in-speedbin-override.patch` — komentar diubah jadi "(see the oc_*.conf files under configs/)" untuk menghindari urutan karakter `*/`.
+- `patches/0002-adreno-a5xx-add-opt-in-speedbin-override.patch` — sama.
+- Perbaikan diverifikasi dengan **reproduksi bug terisolasi** (compile snippet komentar sebelum/sesudah perbaikan dengan `gcc -c`) untuk memastikan penyebabnya benar dan fix-nya benar-benar menghilangkan error, bukan cuma `git apply --check` seperti sebelumnya (yang tidak mendeteksi bug ini karena `git apply` tidak meng-compile).
+
+
 
 ### Diperbaiki
 - **`configs/{mi6x,mia2}/oc_performance.conf`**: `GPU_MAX_MHZ` sebelumnya salah tertulis `700`, padahal `GPU_FORCE_PWRLEVEL_BIN_EFUSE_RAW=157` yang dipakai punya `pwrlevel@0 = 750MHz` (sama seperti bin=0). `GPU_MAX_MHZ` sebelumnya hanya metadata dokumentasi — tidak pernah ada logic yang benar-benar membatasi frekuensi ke nilai itu. Dikoreksi ke `750` agar sesuai perilaku aktual. **Ditemukan dari laporan hasil test hardware pengguna** (GPU menunjukkan 750MHz, bukan 700MHz yang diharapkan).
