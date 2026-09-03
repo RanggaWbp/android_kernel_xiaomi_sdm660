@@ -1,0 +1,16 @@
+menu "Re:Kernel"
+
+config REKERNEL
+	tristate "Re:Kernel support"
+	default y
+	help
+	  Make tombstone users get a better experience by reporting
+	  binder/signal activity against frozen (cached) processes to
+	  userspace via netlink.
+
+config REKERNEL_DEBUG
+	bool "Re:Kernel debug logging"
+	depends on REKERNEL
+	default n
+
+endmenu

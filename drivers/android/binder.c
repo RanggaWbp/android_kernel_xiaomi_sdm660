@@ -71,6 +71,7 @@
 #include <linux/security.h>
 #include <linux/spinlock.h>
 
+#include <net/rekernel.h>
 #include <uapi/linux/android/binder.h>
 #include "binder_alloc.h"
 #include "binder_trace.h"
@@ -2987,6 +2988,9 @@ static void binder_transaction(struct binder_proc *proc,
 		}
 		target_proc = target_thread->proc;
 		atomic_inc(&target_proc->tmp_ref);
+		if (target_proc->tsk)
+			rekernel_report(BINDER, REPLY, proc->pid, proc->tsk,
+					 target_proc->pid, target_proc->tsk, false, NULL, 0);
 		binder_inner_proc_unlock(target_thread->proc);
 	} else {
 		if (tr->target.handle) {
@@ -3040,6 +3044,10 @@ static void binder_transaction(struct binder_proc *proc,
 			goto err_dead_binder;
 		}
 		e->to_node = target_node->debug_id;
+		if (target_proc->tsk)
+			rekernel_report(BINDER, TRANSACTION, proc->pid, proc->tsk,
+					 target_proc->pid, target_proc->tsk,
+					 tr->flags & TF_ONE_WAY, NULL, tr->code);
 		if (WARN_ON(proc == target_proc)) {
 			return_error = BR_FAILED_REPLY;
 			return_error_param = -EINVAL;
