@@ -4,6 +4,12 @@ name: Build OC Kernel (mi6x & mia2)
 # Trigger (push/workflow_dispatch) hanya cara MEMULAI workflow -- begitu
 # jalan, seluruh 8 kombinasi device x profile build tanpa approval/gate
 # manual apapun (sesuai keputusan: "full otomatis semua profile").
+#
+# Update: output tidak lagi jadi Actions artifact biasa -- semua zip
+# langsung diupload ke satu GitHub Release (prerelease) per run, dengan
+# tag unik (tanggal + run_number) supaya run baru TIDAK menimpa release
+# run sebelumnya. Zip AnyKernel3 sudah flash-ready (tidak perlu ekstrak),
+# sha256/metadata/log dibuang dari output karena dianggap tidak penting.
 on:
   push:
     branches: [ master ]
@@ -15,7 +21,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write   # perlu write untuk bikin/isi GitHub Release
 
 jobs:
   build:
@@ -48,6 +54,16 @@ jobs:
       # supaya file conf tetap satu-satunya source of truth.
 
     steps:
+      # ---------------------------------------------------------------
+      # 0. Tanggal build -- dipakai buat nama zip DAN tag release, jadi
+      #    setiap run punya tag unik (tgl + run_number) dan tidak saling
+      #    menimpa release run lain.
+      # ---------------------------------------------------------------
+      - name: Set build date
+        run: |
+          echo "BUILD_DATE=$(date -u +'%d-%m-%Y')" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=oc-kernel-$(date -u +'%Y%m%d')-${{ github.run_number }}" >> "$GITHUB_ENV"
+
       # ---------------------------------------------------------------
       # 1. Checkout REPO CONFIG (configs/patches/scripts) -- repo ini
       # ---------------------------------------------------------------
@@ -179,6 +195,8 @@ jobs:
       # ---------------------------------------------------------------
       # 8. AUTOMATIC VALIDATION -- item #12 brief: cek output benar2
       #    ada, ukuran wajar, log tidak mengandung fatal error.
+      #    build.log HANYA dipakai buat validasi di sini, TIDAK diupload
+      #    kemana pun (bukan bagian dari release).
       # ---------------------------------------------------------------
       - name: Verify build output
         working-directory: kernel
@@ -211,7 +229,9 @@ jobs:
           echo "Build output OK."
 
       # ---------------------------------------------------------------
-      # 9. PACKAGE AnyKernel3 -- siap flash langsung
+      # 9. PACKAGE AnyKernel3 -- siap flash langsung, tanpa ekstrak.
+      #    Tag ReSukiSU + SUSFS dicantumkan di kernel.string biar keliatan
+      #    di recovery/flasher app.
       # ---------------------------------------------------------------
       - name: Package AnyKernel3 zip
         run: |
@@ -226,7 +246,7 @@ jobs:
           cat > anykernel.sh << EOF
           ### AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=Custom OC Kernel (${{ matrix.profile }}, risk=${RISK_LEVEL}) for ${{ matrix.device }} by RanggaWbp
+          kernel.string=Custom OC Kernel (${{ matrix.profile }}, risk=${RISK_LEVEL}) [ReSukiSU+SUSFS] for ${{ matrix.device }} by RanggaWbp - ${{ env.BUILD_DATE }}
           do.devicecheck=1
           do.modules=0
           do.systemless=1
@@ -254,56 +274,34 @@ jobs:
           write_boot;
           EOF
 
-          BUILD_DATE="$(date +'%d-%m-%Y')"
           SHORT_SHA="$(cd ../kernel && git rev-parse --short HEAD)"
-          ZIP_NAME="${{ env.ARTIFACT_NAME }}-${SHORT_SHA}-${BUILD_DATE}.zip"
+          # ARTIFACT_NAME tetap dari conf (single source of truth), tapi
+          # setiap zip otomatis dapet suffix ReSukiSU-SUSFS -- kernel source
+          # ini memang sudah support keduanya, jadi tidak perlu edit satu-satu
+          # ARTIFACT_NAME= di 10 file conf.
+          ZIP_NAME="${{ env.ARTIFACT_NAME }}-ReSukiSU-SUSFS-${SHORT_SHA}-${{ env.BUILD_DATE }}.zip"
           zip -r9 "../${ZIP_NAME}" . -x ".git/*" ".github/*" "*.md"
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
       # ---------------------------------------------------------------
-      # 10. SHA256 -- item #10/#12 brief
+      # 10. UPLOAD KE GITHUB RELEASE (prerelease) -- item #10/#11/#12
+      #     brief digabung jadi satu langkah. Tag release unik per run
+      #     (tanggal + run_number) supaya run baru tidak menimpa release
+      #     run sebelumnya; 8 job matrix dalam run yang sama nge-append
+      #     ke release yang sama (satu release berisi 8 zip flash-ready).
       # ---------------------------------------------------------------
-      - name: Generate SHA256 checksum
-        run: |
-          sha256sum "${{ env.ZIP_NAME }}" > "${{ env.ZIP_NAME }}.sha256"
-          cat "${{ env.ZIP_NAME }}.sha256"
-
-      # ---------------------------------------------------------------
-      # 11. Metadata build (commit SHA, tanggal, kernel version, toolchain,
-      #     profile, device -- item #11 brief)
-      # ---------------------------------------------------------------
-      - name: Write build metadata
-        run: |
-          {
-            echo "device=${{ matrix.device }} (${{ matrix.codename }})"
-            echo "profile=${{ matrix.profile }}"
-            echo "artifact=${{ env.ZIP_NAME }}"
-            echo "commit_sha=$(cd kernel && git rev-parse HEAD)"
-            echo "build_date_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            echo "kernel_version=$(cd kernel && make kernelversion 2>/dev/null || true)"
-            echo "toolchain=mvaisakh/gcc-arm64 + gcc-arm (aarch64-elf-/arm-eabi-)"
-            echo "risk_level=$(grep -E '^RISK_LEVEL=' "oc-config/${{ env.CONF_FILE }}" | cut -d= -f2 || echo none)"
-            echo "hardware_tested=$(grep -E '^HARDWARE_TESTED=' "oc-config/${{ env.CONF_FILE }}" | cut -d= -f2 || echo false)"
-          } > "${{ env.ZIP_NAME }}.metadata.txt"
-          cat "${{ env.ZIP_NAME }}.metadata.txt"
-
-      # ---------------------------------------------------------------
-      # 12. Upload artifact -- nama jelas per device+profile (item #11)
-      # ---------------------------------------------------------------
-      - name: Upload kernel artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload to prerelease
+        uses: softprops/action-gh-release@v2
         with:
-          name: ${{ env.ARTIFACT_NAME }}
-          path: |
-            ${{ env.ZIP_NAME }}
-            ${{ env.ZIP_NAME }}.sha256
-            ${{ env.ZIP_NAME }}.metadata.txt
-          retention-days: 30
-
-      - name: Upload build log (always, for debugging)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ARTIFACT_NAME }}-build-log
-          path: kernel/build.log
-          retention-days: 7
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: "OC Kernel Build ${{ env.BUILD_DATE }} (run #${{ github.run_number }})"
+          prerelease: true
+          fail_on_unmatched_files: true
+          files: ${{ env.ZIP_NAME }}
+          body: |
+            Custom OC Kernel untuk Mi 6X (wayne) & Mi A2 (jasmine_sprout).
+            Fitur: **ReSukiSU + SUSFS** included.
+            Build tanggal: ${{ env.BUILD_DATE }} (run #${{ github.run_number }}).
+            Zip AnyKernel3 -- flash langsung dari recovery/flasher app, tidak perlu diekstrak.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
