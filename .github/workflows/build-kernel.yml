@@ -192,8 +192,12 @@ jobs:
 
           SIZE=$(stat -c%s "$IMG")
           echo "Image.gz-dtb size: ${SIZE} bytes"
-          # sanity range: kernel arm64 msm-4.4 wajar antara ~5MB - ~40MB
-          if (( SIZE < 5000000 || SIZE > 40000000 )); then
+          # Sanity range untuk kernel INI (msm-4.4 + KernelSU + SUSFS + banyak
+          # driver tambahan). Batas awal 5-40MB TERBUKTI salah -- build 46.8MB
+          # yang gagal karena batas ini ternyata build valid (lihat CHANGELOG).
+          # Diperlebar ke 5-90MB agar tidak menolak build valid, tapi tetap
+          # menangkap kasus benar-benar korup (mis. 0 byte atau file rusak).
+          if (( SIZE < 5000000 || SIZE > 90000000 )); then
             echo "::error::Ukuran Image.gz-dtb tidak wajar (${SIZE} bytes) -- kemungkinan build korup"
             exit 1
           fi

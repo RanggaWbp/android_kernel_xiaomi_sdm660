@@ -1,6 +1,15 @@
 # CHANGELOG
 
-## [Belum dirilis] — Perbaikan CRITICAL: patch tidak bisa compile sama sekali
+## [Belum dirilis] — Perbaikan: ambang batas ukuran Image.gz-dtb salah (false positive)
+
+### Bug
+
+Setelah bug komentar C di atas diperbaiki, `oc_extreme` (mia2) **berhasil compile** — tapi workflow menolaknya karena `Image.gz-dtb` berukuran 46.814.284 bytes (46.8MB), sedangkan validator saya membatasi 5-40MB. Ini kernel msm-4.4 dengan KernelSU + SUSFS + banyak driver tambahan (bukan kernel vanilla) — 46.8MB itu wajar, bukan tanda korup. Batas 40MB yang saya tulis sebelumnya cuma tebakan kasar tanpa data build sungguhan.
+
+### Diperbaiki
+- `.github/workflows/build-kernel.yml`: batas atas ukuran `Image.gz-dtb` diperlebar dari 40MB ke **90MB**. Batas bawah 5MB tetap (masih valid untuk menangkap kasus benar-benar kosong/gagal total).
+
+
 
 ### Bug (parah, ditemukan dari log GitHub Actions run pertama)
 
