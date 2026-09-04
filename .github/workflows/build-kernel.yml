@@ -246,7 +246,7 @@ jobs:
           cat > anykernel.sh << EOF
           ### AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=Custom OC Kernel (${{ matrix.profile }}, risk=${RISK_LEVEL}) [ReSukiSU+SUSFS] for ${{ matrix.device }} by RanggaWbp - ${{ env.BUILD_DATE }}
+          kernel.string=Custom OC Kernel (${{ matrix.profile }}, risk=${RISK_LEVEL}) [ReSukiSU+SUSFS+Re-Kernel] for ${{ matrix.device }} by RanggaWbp - ${{ env.BUILD_DATE }}
           do.devicecheck=1
           do.modules=0
           do.systemless=1
@@ -300,7 +300,7 @@ jobs:
           files: ${{ env.ZIP_NAME }}
           body: |
             Custom OC Kernel untuk Mi 6X (wayne) & Mi A2 (jasmine_sprout).
-            Fitur: **ReSukiSU + SUSFS** included.
+            Fitur: **ReSukiSU + SUSFS + Re-Kernel** included.
             Build tanggal: ${{ env.BUILD_DATE }} (run #${{ github.run_number }}).
             Zip AnyKernel3 -- flash langsung dari recovery/flasher app, tidak perlu diekstrak.
         env:
