@@ -301,7 +301,12 @@ jobs:
           body: |
             Custom OC Kernel untuk Mi 6X (wayne) & Mi A2 (jasmine_sprout).
             Fitur: **ReSukiSU + SUSFS + Re-Kernel** included.
-            Build tanggal: ${{ env.BUILD_DATE }} (run #${{ github.run_number }}).
-            Zip AnyKernel3 -- flash langsung dari recovery/flasher app, tidak perlu diekstrak.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            Build Date: ${{ env.BUILD_DATE }} (run #${{ github.run_number }}).
+            Variant :
+            nomal - nothing changes
+            CPU only - OC CPU 2.46 GHz
+            Balance - OC GPU 700 MHz
+            permofmance - OC CPU 2.46 GHz - OC GPU 700 MHz
+            Extreme - OC CPU 2.46 GHz - OC GPU 750 MHz
+                    env:
+                      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
