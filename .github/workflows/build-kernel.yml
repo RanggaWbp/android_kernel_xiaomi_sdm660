@@ -306,5 +306,5 @@ jobs:
             Catatan: profile GPU OC (Balance/Performance/Extreme) sudah
             DIHAPUS -- terbukti random reboot (GPU hang) di hardware nyata.
             Hanya OC CPU yang terbukti stabil. Lihat CHANGELOG.md.
-  env:
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
