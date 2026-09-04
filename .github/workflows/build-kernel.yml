@@ -18,13 +18,7 @@ on:
       - "patches/**"
       - "scripts/**"
       - ".github/workflows/build-kernel.yml"
-  workflow_dispatch:
-    inputs:
-      kernel_ref:
-        description: "Branch/tag/commit kernel source yang mau di-build (default master)"
-        required: false
-        default: "master"
-        type: string
+  workflow_dispatch: {}
 
 permissions:
   contents: write   # perlu write untuk bikin/isi GitHub Release
@@ -100,15 +94,11 @@ jobs:
 
       # ---------------------------------------------------------------
       # 3. Checkout KERNEL SOURCE ke folder terpisah
-      #    ref bisa dipilih manual via workflow_dispatch (default master)
-      #    -- dipakai untuk test-build branch experiment (mis. eksperimen
-      #    merge/cherry-pick upstream 4.4.302) tanpa ubah branch default.
       # ---------------------------------------------------------------
       - name: Checkout kernel source
         uses: actions/checkout@v4
         with:
           repository: RanggaWbp/android_kernel_xiaomi_sdm660
-          ref: ${{ github.event.inputs.kernel_ref || 'master' }}
           path: kernel
           fetch-depth: 1
 
