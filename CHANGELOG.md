@@ -1,6 +1,23 @@
 # CHANGELOG
 
-## [Belum dirilis] — Perbaikan: ambang batas ukuran Image.gz-dtb salah (false positive)
+## [Belum dirilis] — Hapus profile GPU OC yang terbukti gagal
+
+### Dihapus
+
+Berdasarkan hasil pengujian hardware nyata (tabel di bawah, sebelumnya sudah
+dicatat di changelog ini): `oc_balanced`, `oc_performance`, `oc_extreme`
+(mi6x & mia2) semuanya menyentuh GPU dan **konsisten gagal** dengan random
+reboot / GPU hang (`kgsl gpu timeout` -> kernel panic). Hanya `normal` dan
+`oc_cpu_only` (OC CPU big cluster saja, GPU 100% stock) yang terbukti stabil.
+
+- `configs/{mi6x,mia2}/{oc_balanced,oc_performance,oc_extreme}.conf` — dihapus.
+- `patches/0002-adreno-a5xx-add-opt-in-speedbin-override.patch` — dihapus (tidak dipakai config manapun lagi).
+- `.github/workflows/build-kernel.yml`:
+  - Matrix `profile` dipersempit dari 5 ke **2** (`normal`, `oc_cpu_only`) -> 4 kombinasi build (2 device x 2 profile), bukan 10.
+  - Step apply patch 0002 (GPU force-speedbin) dihapus dari step "Apply opt-in speedbin override patches".
+  - Body release note diperbarui, baris Balance/Performance/Extreme dihapus.
+
+## [Belum dirilis] (sebelumnya) — Perbaikan: ambang batas ukuran Image.gz-dtb salah (false positive)
 
 ### Bug
 

@@ -31,7 +31,7 @@ jobs:
       fail-fast: false
       matrix:
         device: [mi6x, mia2]
-        profile: [normal, oc_balanced, oc_performance, oc_extreme, oc_cpu_only]
+        profile: [normal, oc_cpu_only]
         include:
           # device-specific constants -- dipakai buat AnyKernel3 properties()
           - device: mi6x
@@ -163,12 +163,9 @@ jobs:
             echo "Profile tidak menyentuh CPU speedbin -> patch 0001 dilewati"
           fi
 
-          if [[ -n "${GPU_FORCE_PWRLEVEL_BIN_EFUSE_RAW:-}" ]]; then
-            echo "Profile butuh GPU force-speedbin -> apply patch 0002"
-            git apply "../oc-config/patches/0002-adreno-a5xx-add-opt-in-speedbin-override.patch"
-          else
-            echo "Profile tidak menyentuh GPU speedbin -> patch 0002 dilewati"
-          fi
+          # GPU speedbin override (patch 0002) DIHAPUS -- terbukti gagal (random
+          # reboot / GPU hang) di hardware nyata pada semua profile yang memakainya
+          # (oc_balanced, oc_performance, oc_extreme). Lihat CHANGELOG.md.
 
       # ---------------------------------------------------------------
       # 6. Suntik nilai override konkret ke DTS device target
@@ -303,10 +300,11 @@ jobs:
             Fitur: **ReSukiSU + SUSFS + Re-Kernel** included.
             Build Date: ${{ env.BUILD_DATE }} (run #${{ github.run_number }}).
             Variant :
-            nomal - nothing changes
+            normal - nothing changes
             CPU only - OC CPU 2.46 GHz
-            Balance - OC GPU 700 MHz
-            permofmance - OC CPU 2.46 GHz - OC GPU 700 MHz
-            Extreme - OC CPU 2.46 GHz - OC GPU 750 MHz
+
+            Catatan: profile GPU OC (Balance/Performance/Extreme) sudah
+            DIHAPUS -- terbukti random reboot (GPU hang) di hardware nyata.
+            Hanya OC CPU yang terbukti stabil. Lihat CHANGELOG.md.
   env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
