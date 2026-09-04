@@ -308,5 +308,5 @@ jobs:
             Balance - OC GPU 700 MHz
             permofmance - OC CPU 2.46 GHz - OC GPU 700 MHz
             Extreme - OC CPU 2.46 GHz - OC GPU 750 MHz
-                    env:
-                      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
