@@ -303,8 +303,5 @@ jobs:
             normal - nothing changes
             CPU only - OC CPU 2.46 GHz
 
-            Catatan: profile GPU OC (Balance/Performance/Extreme) sudah
-            DIHAPUS -- terbukti random reboot (GPU hang) di hardware nyata.
-            Hanya OC CPU yang terbukti stabil. Lihat CHANGELOG.md.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
