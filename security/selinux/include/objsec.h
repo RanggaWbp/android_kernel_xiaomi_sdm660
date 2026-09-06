@@ -34,6 +34,9 @@ struct task_security_struct {
 	u32 create_sid;		/* fscreate SID */
 	u32 keycreate_sid;	/* keycreate SID */
 	u32 sockcreate_sid;	/* fscreate SID */
+#ifndef BBG_USE_DEFINE_LSM
+	struct bbg_cred_security_struct  bbg_cred; /* bbg cred security */
+#endif
 };
 
 struct inode_security_struct {
