@@ -26,6 +26,9 @@
 #include <linux/spinlock.h>
 #include <net/net_namespace.h>
 #include "security.h"
+#ifndef BBG_USE_DEFINE_LSM
+#include "bbg_tracing.h"
+#endif
 
 struct task_security_struct {
 	u32 osid;		/* SID prior to last execve */
