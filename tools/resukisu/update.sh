@@ -200,6 +200,7 @@ LOCAL_CCFLAGS_EXTRA=$(grep -o '\-Wno-missing-prototypes' "$KSU_DIR/kernel/Kbuild
 
 sync_dir "$UPSTREAM_CACHE/kernel" "$KSU_DIR/kernel"
 sync_dir "$UPSTREAM_CACHE/userspace" "$KSU_DIR/userspace"
+sync_dir "$UPSTREAM_CACHE/uapi" "$KSU_DIR/uapi"
 
 log "Folder KernelSU/kernel di-sync dari upstream $NEW_COMMIT."
 
