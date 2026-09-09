@@ -138,16 +138,6 @@ jobs:
           git clone --depth=1 https://github.com/mvaisakh/gcc-arm64.git toolchains/gcc64
           git clone --depth=1 https://github.com/mvaisakh/gcc-arm.git toolchains/gcc32
 
-      - name: Initialize KernelSU as a local git repo
-        working-directory: kernel
-        run: |
-          # Wajib ada di source ini agar drivers/kernelsu/Kbuild lolos
-          # sanity check versioning -- lihat workflow existing repo.
-          cd KernelSU
-          git init -q
-          git add -A
-          git -c user.email="ci@local" -c user.name="ci" commit -q -m "snapshot for build"
-
       # ---------------------------------------------------------------
       # 5. APPLY PATCH -- hanya untuk profile yang benar-benar butuh
       #    mekanisme override (dibaca dari isi conf, bukan hardcode

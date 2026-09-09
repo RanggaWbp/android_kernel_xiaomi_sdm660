@@ -67,17 +67,6 @@ jobs:
           git clone --depth=1 https://github.com/mvaisakh/gcc-arm64.git toolchains/gcc64
           git clone --depth=1 https://github.com/mvaisakh/gcc-arm.git toolchains/gcc32
 
-      - name: Initialize KernelSU as a local git repo
-        run: |
-          # The KernelSU source is embedded directly (not as a submodule) and
-          # its own .git/ is gitignored, but drivers/kernelsu/Kbuild requires
-          # a .git directory to exist inside KernelSU/ to compute a version
-          # number and pass its "is this a proper submodule" sanity check.
-          cd KernelSU
-          git init -q
-          git add -A
-          git -c user.email="ci@local" -c user.name="ci" commit -q -m "snapshot for build"
-
       - name: Build kernel
         run: |
           export ARCH=arm64
