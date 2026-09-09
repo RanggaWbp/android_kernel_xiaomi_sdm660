@@ -29,7 +29,6 @@ import androidx.compose.material.icons.twotone.FilterList
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenuPopup
@@ -75,37 +74,42 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.dropUnlessResumed
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.resukisu.resukisu.R
+import com.resukisu.resukisu.domain.model.SulogEntry
+import com.resukisu.resukisu.domain.model.SulogEventFilter
+import com.resukisu.resukisu.domain.model.SulogEventType
+import com.resukisu.resukisu.domain.model.SulogFile
+import com.resukisu.resukisu.domain.model.toSulogDisplayName
 import com.resukisu.resukisu.ui.component.SearchAppBar
 import com.resukisu.resukisu.ui.component.WarningCard
+import com.resukisu.resukisu.ui.component.rememberSearchAppBarScrollBehavior
 import com.resukisu.resukisu.ui.component.settings.SettingsBaseWidget
 import com.resukisu.resukisu.ui.component.settings.SettingsChooseWidget
 import com.resukisu.resukisu.ui.component.settings.lazySegmentColumn
 import com.resukisu.resukisu.ui.navigation.LocalNavigator
 import com.resukisu.resukisu.ui.theme.CardConfig
 import com.resukisu.resukisu.ui.theme.blurSource
+import com.resukisu.resukisu.ui.util.ActivityResumeEffect
 import com.resukisu.resukisu.ui.util.LocalBlurState
-import com.resukisu.resukisu.ui.util.SulogEntry
-import com.resukisu.resukisu.ui.util.SulogEventFilter
-import com.resukisu.resukisu.ui.util.SulogEventType
-import com.resukisu.resukisu.ui.util.SulogFile
-import com.resukisu.resukisu.ui.util.toSulogDisplayName
 import com.resukisu.resukisu.ui.viewmodel.SulogActions
 import com.resukisu.resukisu.ui.viewmodel.SulogFileSelector
 import com.resukisu.resukisu.ui.viewmodel.SulogScreenState
+import com.resukisu.resukisu.ui.viewmodel.SulogUiAction
 import com.resukisu.resukisu.ui.viewmodel.SulogViewModel
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
+import org.koin.compose.viewmodel.koinViewModel
+
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun SulogScreen() {
     val navigator = LocalNavigator.current
-    val viewModel = viewModel<SulogViewModel>()
+    val viewModel = koinViewModel<SulogViewModel>()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) {
-        viewModel.refreshLatest()
+    ActivityResumeEffect {
+        viewModel.dispatch(SulogUiAction.RefreshLatest)
     }
 
     val state = SulogScreenState(
@@ -123,12 +127,12 @@ fun SulogScreen() {
     )
     val actions = SulogActions(
         onBack = dropUnlessResumed { navigator.pop() },
-        onRefresh = viewModel::refreshLatest,
-        onEnableSulog = viewModel::enableSulog,
-        onCleanFile = viewModel::cleanFile,
-        onSearchTextChange = viewModel::setSearchText,
-        onToggleFilter = viewModel::toggleFilter,
-        onSelectFile = viewModel::refresh,
+        onRefresh = { viewModel.dispatch(SulogUiAction.RefreshLatest) },
+        onEnableSulog = { viewModel.dispatch(SulogUiAction.Enable) },
+        onCleanFile = { viewModel.dispatch(SulogUiAction.CleanFile) },
+        onSearchTextChange = { viewModel.dispatch(SulogUiAction.Search(it)) },
+        onToggleFilter = { viewModel.dispatch(SulogUiAction.ToggleFilter(it)) },
+        onSelectFile = { viewModel.dispatch(SulogUiAction.SelectFile(it)) },
     )
 
     SulogScreenContent(
@@ -143,10 +147,13 @@ private fun SulogScreenContent(
     state: SulogScreenState,
     actions: SulogActions,
 ) {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(
-        rememberTopAppBarState(
-            initialHeightOffset = -154f,
-            initialHeightOffsetLimit = -154f // from debugger
+    val cardConfig: CardConfig = koinInject()
+    val scrollBehavior = rememberSearchAppBarScrollBehavior(
+        TopAppBarDefaults.exitUntilCollapsedScrollBehavior(
+            rememberTopAppBarState(
+                initialHeightOffset = -154f,
+                initialHeightOffsetLimit = -154f // from debugger
+            )
         )
     )
     val pullToRefreshState = rememberPullToRefreshState()
@@ -206,12 +213,6 @@ private fun SulogScreenContent(
                                     DropdownMenuItem(
                                         selected = filter in state.selectedFilters,
                                         text = { Text(sulogFilterLabel(filter)) },
-                                        trailingIcon = {
-                                            Checkbox(
-                                                checked = filter in state.selectedFilters,
-                                                onCheckedChange = null,
-                                            )
-                                        },
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
                                             actions.onToggleFilter(filter)
@@ -271,7 +272,7 @@ private fun SulogScreenContent(
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
                 ) {
                     item {
-                        Spacer(modifier = Modifier.height(innerPadding.calculateTopPadding() + 8.dp))
+                        Spacer(modifier = Modifier.height(innerPadding.calculateTopPadding()))
                     }
 
                     item {
@@ -289,7 +290,7 @@ private fun SulogScreenContent(
                                     .clip(RoundedCornerShape(16.dp))
                                     .background(
                                         MaterialTheme.colorScheme.surfaceBright.copy(
-                                            alpha = CardConfig.cardAlpha
+                                            alpha = cardConfig.cardAlpha
                                         )
                                     )
                             ) {
@@ -604,11 +605,6 @@ private fun LazyListScope.sulogEntriesSection(
                 entries,
                 key = { index, entry -> "$index-${entry.key}" }) { index, entry ->
                 SettingsBaseWidget(
-                    modifier = if (index < entries.lastIndex) {
-                        Modifier.padding(bottom = 2.dp)
-                    } else {
-                        Modifier
-                    },
                     onClick = { onEntryClick(entry) },
                     title = sulogEntryTitle(entry),
                     iconPlaceholder = false,

@@ -8,9 +8,11 @@ import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
@@ -27,12 +29,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.paint
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.zIndex
 import androidx.core.app.ActivityCompat
 import androidx.core.net.toUri
@@ -65,6 +74,8 @@ import com.resukisu.resukisu.ui.navigation.HandleDeepLink
 import com.resukisu.resukisu.ui.navigation.LocalNavigator
 import com.resukisu.resukisu.ui.navigation.Route
 import com.resukisu.resukisu.ui.navigation.rememberNavigator
+import com.resukisu.resukisu.ui.overscroll.StretchOverscrollCompensationState
+import com.resukisu.resukisu.ui.overscroll.rememberCustomOverscrollFactory
 import com.resukisu.resukisu.ui.screen.AppProfileScreen
 import com.resukisu.resukisu.ui.screen.AppProfileTemplateScreen
 import com.resukisu.resukisu.ui.screen.DynamicManagerScreen
@@ -83,13 +94,14 @@ import com.resukisu.resukisu.ui.screen.moduleRepo.ModuleRepoScreen
 import com.resukisu.resukisu.ui.screen.moduleRepo.OnlineModuleDetailScreen
 import com.resukisu.resukisu.ui.screen.susfs.SuSFSConfigScreen
 import com.resukisu.resukisu.ui.screen.themeSettings.ThemeSettingsScreen
+import com.resukisu.resukisu.ui.theme.LocalBackgroundRenderState
 import com.resukisu.resukisu.ui.theme.ThemeConfig
-import com.resukisu.resukisu.ui.theme.backgroundImagePainter
 import com.resukisu.resukisu.ui.util.LocalBackgroundBlurAnchor
 import com.resukisu.resukisu.ui.util.LocalBlurState
 import com.resukisu.resukisu.ui.util.LocalPermissionRequestInterface
 import com.resukisu.resukisu.ui.util.LocalSnackbarHost
-import com.resukisu.resukisu.ui.util.rootAvailable
+import com.resukisu.resukisu.ui.util.LocalStretchOverscrollCompensationState
+import com.resukisu.resukisu.ui.viewmodel.MainIntentViewModel
 import com.resukisu.resukisu.ui.viewmodel.PredictiveBackAnimation
 import com.resukisu.resukisu.ui.viewmodel.SettingsViewModel
 import com.resukisu.resukisu.ui.webui.WebUIActivity
@@ -100,10 +112,13 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.koin.compose.koinInject
+import org.koin.compose.viewmodel.koinViewModel
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.shader.isRenderEffectSupported
 import kotlin.coroutines.resume
+
 
 @Composable
 fun NavContainer(
@@ -113,15 +128,20 @@ fun NavContainer(
     showConfirmationDialog: MutableState<Boolean>,
     pendingZipFiles: MutableState<List<ZipFileInfo>>,
 ) {
+    val themeConfig: ThemeConfig = koinInject()
+    val backgroundRenderState = LocalBackgroundRenderState.current
+    val zipFileDetector = koinInject<ZipFileDetector>()
     val activity = LocalActivity.current as MainActivity
     val context = LocalContext.current
+    val mainIntentViewModel = koinViewModel<MainIntentViewModel>()
+    val mainIntentState by mainIntentViewModel.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(zipUri) {
         if (zipUri.isNullOrEmpty()) return@LaunchedEffect
 
         activity.lifecycleScope.launch(Dispatchers.IO) {
             val zipFileInfos = zipUri.map { uri ->
-                ZipFileDetector.parseZipFile(context, uri)
+                zipFileDetector.parseZipFile(context, uri)
             }.filter { it.type != ZipType.UNKNOWN }
 
             withContext(Dispatchers.Main) {
@@ -137,6 +157,12 @@ fun NavContainer(
 
     val settings by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val systemDensity = LocalDensity.current
+    val stretchOverscrollCompensationState = remember {
+        StretchOverscrollCompensationState()
+    }
+    val overscrollFactory = rememberCustomOverscrollFactory(
+        compensationState = stretchOverscrollCompensationState,
+    )
 
     val density = remember(systemDensity, settings.dpi) {
         if (settings.dpi <= 0f) {
@@ -250,6 +276,8 @@ fun NavContainer(
     )
 
     CompositionLocalProvider(
+        LocalOverscrollFactory provides overscrollFactory,
+        LocalStretchOverscrollCompensationState provides stretchOverscrollCompensationState,
         LocalPermissionRequestInterface provides permissionRequestInterface,
         LocalNavigator provides navigator,
         LocalDensity provides density
@@ -277,7 +305,7 @@ fun NavContainer(
 
                     when {
                         kernelUris.isNotEmpty() && moduleUris.isEmpty() -> {
-                            if (kernelUris.size == 1 && rootAvailable()) {
+                            if (kernelUris.size == 1 && mainIntentState.rootAvailable) {
                                 withContext(Dispatchers.Main) {
                                     navigator.push(
                                         Route.Install(
@@ -292,9 +320,7 @@ fun NavContainer(
                         moduleUris.isNotEmpty() -> {
                             withContext(Dispatchers.Main) {
                                 navigator.push(
-                                    Route.Flash(
-                                        FlashIt.FlashModules(ArrayList(moduleUris))
-                                    )
+                                    Route.Flash.modules(moduleUris.map(Uri::toString))
                                 )
                             }
                         }
@@ -368,8 +394,8 @@ fun NavContainer(
                             mutableStateOf<LayoutCoordinates?>(null)
                         }
 
-                        LaunchedEffect(backgroundImagePainter) {
-                            if (backgroundImagePainter == null) {
+                        LaunchedEffect(backgroundRenderState.imagePainter) {
+                            if (backgroundRenderState.imagePainter == null) {
                                 backgroundBlurAnchorCoordinates = null
                             }
                         }
@@ -384,7 +410,7 @@ fun NavContainer(
                                         navigator.current()
                                     )
                                     .then(
-                                        if (!ThemeConfig.backgroundImageLoaded) Modifier.background(
+                                        if (!themeConfig.backgroundImageLoaded) Modifier.background(
                                             MaterialTheme.colorScheme.surfaceContainer
                                         ) else Modifier
                                     )
@@ -394,12 +420,12 @@ fun NavContainer(
 
                                 CompositionLocalProvider(
                                     LocalBlurState provides rememberMaterial3BlurBackdrop(
-                                        ThemeConfig.isEnableBlur
+                                        themeConfig.isEnableBlur
                                     ),
                                     LocalSnackbarHost provides snackBarHostState,
                                     LocalBackgroundBlurAnchor provides backgroundBlurAnchorCoordinates,
                                 ) {
-                                    backgroundImagePainter?.let {
+                                    backgroundRenderState.imagePainter?.let {
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxSize()
@@ -418,7 +444,7 @@ fun NavContainer(
                                                     drawContent()
                                                     drawRect(
                                                         color = surfaceContainer.copy(
-                                                            alpha = ThemeConfig.backgroundDim
+                                                            alpha = themeConfig.backgroundDim
                                                         )
                                                     )
                                                 }
@@ -438,19 +464,20 @@ fun NavContainer(
                     entry<Route.AppProfileTemplate> { AppProfileTemplateScreen() }
                     entry<Route.TemplateEditor> { key ->
                         TemplateEditorScreen(
-                            key.template,
-                            key.readOnly
+                            templateId = key.templateId,
+                            readOnly = key.readOnly,
+                            isCreation = key.isCreation,
                         )
                     }
-                    entry<Route.AppProfile> { key -> AppProfileScreen(key.appGroup) }
+                    entry<Route.AppProfile> { key -> AppProfileScreen(key.uid, key.packageName) }
                     entry<Route.ModuleRepo> { ModuleRepoScreen() }
                     entry<Route.ModuleRepoDetail> { key ->
                         OnlineModuleDetailScreen(
-                            key.module
+                            key.moduleId
                         )
                     }
                     entry<Route.Install> { key -> InstallScreen(key.preselectedKernelUri) }
-                    entry<Route.Flash> { key -> FlashScreen(key.flashIt) }
+                    entry<Route.Flash> { key -> FlashScreen(key.toFlashIt()) }
                     entry<Route.ExecuteModuleAction> { key ->
                         ExecuteModuleActionScreen(
                             key.moduleId
@@ -460,7 +487,9 @@ fun NavContainer(
                     entry<Route.SuperUser> { MainScreen() }
                     entry<Route.Module> { MainScreen() }
                     entry<Route.Settings> { MainScreen() }
-                    entry<Route.ThemeSettings> { ThemeSettingsScreen() }
+                    entry<Route.ThemeSettings> {
+                        ThemeSettingsScreen(settingsViewModel = settingsViewModel)
+                    }
                     entry<Route.SuSFSConfig> { SuSFSConfigScreen() }
                     entry<Route.UmountManager> { UmountManagerScreen() }
                     entry<Route.DynamicManager> { DynamicManagerScreen() }
@@ -528,6 +557,23 @@ fun NavContainer(
     }
 }
 
+private fun Route.Flash.toFlashIt(): FlashIt = when (type) {
+    Route.Flash.TYPE_BOOT -> FlashIt.FlashBoot(
+        boot = bootUri,
+        lkmUri = lkmUri,
+        kmi = kmi,
+        ota = ota,
+        partition = partition,
+    )
+
+    Route.Flash.TYPE_MODULE -> FlashIt.FlashModule(uris.firstOrNull().orEmpty())
+    Route.Flash.TYPE_MODULES -> FlashIt.FlashModules(uris, currentIndex)
+    Route.Flash.TYPE_MODULE_UPDATE -> FlashIt.FlashModuleUpdate(uris.firstOrNull().orEmpty())
+    Route.Flash.TYPE_RESTORE -> FlashIt.FlashRestore
+    Route.Flash.TYPE_UNINSTALL -> FlashIt.FlashUninstall
+    else -> FlashIt.FlashModule(uris.firstOrNull().orEmpty())
+}
+
 /**
  * Remember a LayerBackdrop for Material 3 with a surfaceContainer background
  * to prevent alpha-blending artifacts.
@@ -536,17 +582,98 @@ fun NavContainer(
  * @return A LayerBackdrop instance if supported and enabled, null otherwise.
  */
 @Composable
-fun rememberMaterial3BlurBackdrop(enableBlur: Boolean): LayerBackdrop? {
+fun rememberMaterial3BlurBackdrop(
+    enableBlur: Boolean,
+    pagerState: PagerState? = null,
+    pagerPage: Int? = null,
+): LayerBackdrop? {
+    val themeConfig: ThemeConfig = koinInject()
+    val backgroundRenderState = LocalBackgroundRenderState.current
     if (!enableBlur || !isRenderEffectSupported()) return null
 
     val backgroundColor =
         MaterialTheme.colorScheme.surfaceContainer
+    val layoutDirection = LocalLayoutDirection.current
+    val backgroundAnchor = LocalBackgroundBlurAnchor.current
 
     return rememberLayerBackdrop {
-        if (ThemeConfig.isEnableBlurExp) {
-            backgroundImagePainter?.let { painter ->
-                with(painter) {
-                    draw(size = drawContext.size)
+        if (themeConfig.isEnableBlurExp) {
+            backgroundRenderState.imagePainter?.let { painter ->
+                val backgroundViewportSize = backgroundAnchor
+                    ?.takeIf { it.isAttached && it.size.width > 0 && it.size.height > 0 }
+                    ?.size
+                    ?: backgroundRenderState.blurViewportSize
+                val backgroundWidth = backgroundViewportSize.width
+                    .takeIf { it > 0 }
+                    ?.toFloat()
+                    ?: size.width
+                val backgroundHeight = backgroundViewportSize.height
+                    .takeIf { it > 0 }
+                    ?.toFloat()
+                    ?: size.height
+                val pagerViewportWidth = pagerState
+                    ?.layoutInfo
+                    ?.viewportSize
+                    ?.width
+                    ?.takeIf { it > 0 }
+                    ?.toFloat()
+                    ?: size.width
+                val leadingNavigationWidth =
+                    (backgroundWidth - pagerViewportWidth).coerceAtLeast(0f)
+                val pagerViewportLeft = if (layoutDirection == LayoutDirection.Ltr) {
+                    leadingNavigationWidth
+                } else {
+                    0f
+                }
+                val pageOffset = if (
+                    pagerState != null &&
+                    pagerPage != null &&
+                    pagerPage in 0 until pagerState.pageCount
+                ) {
+                    pagerState.getOffsetDistanceInPages(pagerPage)
+                } else {
+                    0f
+                }
+                val physicalPageOffset = pageOffset * pagerViewportWidth *
+                        if (layoutDirection == LayoutDirection.Ltr) 1f else -1f
+                val backgroundOffset = pagerViewportLeft + physicalPageOffset
+                val backgroundBitmap = backgroundRenderState.imageBitmap
+
+                if (
+                    backgroundBitmap != null &&
+                    backgroundBitmap.width > 0 &&
+                    backgroundBitmap.height > 0
+                ) {
+                    val backgroundScale = maxOf(
+                        backgroundWidth / backgroundBitmap.width,
+                        backgroundHeight / backgroundBitmap.height,
+                    )
+                    val renderedLeft =
+                        (backgroundWidth - backgroundBitmap.width * backgroundScale) / 2f
+                    val renderedTop =
+                        (backgroundHeight - backgroundBitmap.height * backgroundScale) / 2f
+
+                    translate(
+                        left = -backgroundOffset + renderedLeft,
+                        top = renderedTop,
+                    ) {
+                        scale(
+                            scaleX = backgroundScale,
+                            scaleY = backgroundScale,
+                            pivot = Offset.Zero,
+                        ) {
+                            drawImage(
+                                image = backgroundBitmap,
+                                filterQuality = FilterQuality.Low,
+                            )
+                        }
+                    }
+                } else {
+                    translate(left = -backgroundOffset) {
+                        with(painter) {
+                            draw(size = Size(backgroundWidth, backgroundHeight))
+                        }
+                    }
                 }
             }
         } else {
@@ -554,7 +681,7 @@ fun rememberMaterial3BlurBackdrop(enableBlur: Boolean): LayerBackdrop? {
         }
 
         drawRect(
-            color = backgroundColor.copy(alpha = ThemeConfig.backgroundDim)
+            color = backgroundColor.copy(alpha = themeConfig.backgroundDim)
         )
 
         drawContent()

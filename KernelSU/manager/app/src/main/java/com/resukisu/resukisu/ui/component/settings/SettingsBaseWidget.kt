@@ -66,6 +66,7 @@ import com.resukisu.resukisu.ui.component.settings.material3internal.rememberAni
 import com.resukisu.resukisu.ui.theme.CardConfig
 import com.resukisu.resukisu.ui.theme.ThemeConfig
 import com.resukisu.resukisu.ui.theme.renderBackgroundBlur
+import org.koin.compose.koinInject
 
 /**
  * A [CompositionLocal] that provides the dynamically calculated [Shape] for items
@@ -94,7 +95,7 @@ val LocalSegmentedItemShape = compositionLocalOf<Shape> { RoundedCornerShape(16.
  * If [onClick] is not null, this also controls clickability.
  * @param isError If true, applies the error color to the description text.
  * @param selected If true, highlights the widget with a primary container background.
- * @param renderBackgroundBlur If true, this composable will renderBackgroundBlur.
+ * @param isOnBackground If true, this composable will renderBackgroundBlur, and will process cardAlpha.
  * @param fillMaxWidth If true, this composable will fill max width.
  * @param onClick Callback to be invoked when the widget is clicked. If null, the widget is not clickable.
  * @param onLongClick Callback to be invoked when the widget is LONG CLICKED. If null, the widget is not clickable.
@@ -104,6 +105,7 @@ val LocalSegmentedItemShape = compositionLocalOf<Shape> { RoundedCornerShape(16.
  * @param trailingContent A composable slot for trailing content, e.g. switches, checkboxes, or arrows.
  * @param containerColor Custom container color, if provided, selected/isError will be ignored.
  */
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SettingsBaseWidget(
@@ -120,7 +122,7 @@ fun SettingsBaseWidget(
     enabled: Boolean = true,
     isError: Boolean = false,
     selected: Boolean = false,
-    renderBackgroundBlur: Boolean = true,
+    isOnBackground: Boolean = true,
     fillMaxWidth: Boolean = true,
     onClick: ((Offset) -> Unit)? = null,
     onLongClick: ((Offset) -> Unit)? = null,
@@ -131,6 +133,8 @@ fun SettingsBaseWidget(
     containerColor: Color? = null,
     trailingContent: (@Composable BoxScope.(interactionSource: MutableInteractionSource) -> Unit)? = null,
 ) {
+    val themeConfig: ThemeConfig = koinInject()
+    val cardConfig: CardConfig = koinInject()
     val hapticFeedback = LocalHapticFeedback.current
     val alpha = if (enabled) 1f else 0.38f
 
@@ -141,17 +145,21 @@ fun SettingsBaseWidget(
 
     val baseShape = LocalSegmentedItemShape.current
 
-    val finalContainerColor = containerColor
+    val finalContainerColor = (containerColor
         ?: if (selected) {
             MaterialTheme.colorScheme.primaryContainer
         } else {
             MaterialTheme.colorScheme.surfaceBright
-        }.copy(
-            alpha = CardConfig.cardAlpha
-        )
+        }).run {
+        if (isOnBackground) {
+            copy(
+                alpha = cardConfig.cardAlpha
+            )
+        } else this
+    }
 
     val backgroundColor = run {
-        if (renderBackgroundBlur && ThemeConfig.isEnableBlurExp)
+        if (isOnBackground && themeConfig.isEnableBlurExp)
             Color.Transparent
         else finalContainerColor
     }
@@ -241,7 +249,7 @@ fun SettingsBaseWidget(
     }
 
     var itemModifier = (if (fillMaxWidth) modifier.fillMaxWidth() else modifier)
-    if (renderBackgroundBlur && ThemeConfig.isEnableBlurExp)
+    if (isOnBackground && themeConfig.isEnableBlurExp)
         itemModifier = itemModifier
             .clip(clipShape)
             .renderBackgroundBlur(finalContainerColor)

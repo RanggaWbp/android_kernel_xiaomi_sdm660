@@ -51,8 +51,11 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.resukisu.resukisu.R
-import com.resukisu.resukisu.data.susfs.SuSFSConfigHelper
-import com.resukisu.resukisu.data.susfs.SuSFSSlotInfo
+import com.resukisu.resukisu.domain.model.SuSFSSlotInfo
+import com.resukisu.resukisu.ui.viewmodel.SuSFSViewModel
+import com.resukisu.resukisu.ui.viewmodel.SuSFSUiAction
+import com.resukisu.resukisu.ui.viewmodel.awaitSuSFSBoolean
+import com.resukisu.resukisu.ui.viewmodel.awaitSuSFSSlotInfo
 import com.resukisu.resukisu.ui.component.settings.SegmentedColumn
 import com.resukisu.resukisu.ui.component.settings.SettingsBaseWidget
 import com.resukisu.resukisu.ui.component.settings.SettingsJumpPageWidget
@@ -62,7 +65,9 @@ import com.resukisu.resukisu.ui.component.settings.lazySegmentColumn
 import com.resukisu.resukisu.ui.screen.susfs.RegisterSuSFSRefresh
 import com.resukisu.resukisu.ui.screen.susfs.SuSFSRefreshRegistrar
 import com.resukisu.resukisu.ui.util.LocalSnackbarHost
+import com.resukisu.resukisu.ui.util.showReplacingSnackbar
 import kotlinx.coroutines.launch
+import org.koin.compose.viewmodel.koinViewModel
 
 private enum class UnameDialogTab {
     Manual,
@@ -76,6 +81,7 @@ fun StandardFeaturesTab(
     innerPadding: PaddingValues,
     onRegisterRefresh: SuSFSRefreshRegistrar,
 ) {
+    val configHelper = koinViewModel<SuSFSViewModel>()
     val snackbarHost = LocalSnackbarHost.current
     val scope = rememberCoroutineScope()
 
@@ -113,7 +119,7 @@ fun StandardFeaturesTab(
         isSlotInfoLoading = true
         slotInfoLoadFailed = false
         try {
-            val loadedSlotInfos = SuSFSConfigHelper.loadSlotInfo()
+            val loadedSlotInfos = awaitSuSFSSlotInfo(configHelper)
             if (loadedSlotInfos == null) {
                 slotInfoLoadFailed = true
             } else {
@@ -145,11 +151,13 @@ fun StandardFeaturesTab(
     val handleLoggingChange: (Boolean) -> Unit = remember(scope, snackbarHost, operationFailedMsg) {
         { newValue: Boolean ->
             scope.launch {
-                val ok = SuSFSConfigHelper.enableLog(newValue)
+                val ok = awaitSuSFSBoolean(configHelper) { reply ->
+                    SuSFSUiAction.EnableLog(newValue, reply)
+                }
                 if (ok) {
                     loggingEnabled = newValue
                 } else {
-                    snackbarHost.showSnackbar(operationFailedMsg)
+                    snackbarHost.showReplacingSnackbar(operationFailedMsg)
                 }
             }
         }
@@ -159,11 +167,13 @@ fun StandardFeaturesTab(
         remember(scope, snackbarHost, operationFailedMsg) {
             { newValue: Boolean ->
                 scope.launch {
-                    val ok = SuSFSConfigHelper.enableAvcLogSpoofing(newValue)
+                    val ok = awaitSuSFSBoolean(configHelper) { reply ->
+                        SuSFSUiAction.EnableAvcLogSpoofing(newValue, reply)
+                    }
                     if (ok) {
                         avcLogSpoofingEnabled = newValue
                     } else {
-                        snackbarHost.showSnackbar(operationFailedMsg)
+                        snackbarHost.showReplacingSnackbar(operationFailedMsg)
                     }
                 }
             }
@@ -173,11 +183,13 @@ fun StandardFeaturesTab(
         remember(scope, snackbarHost, operationFailedMsg) {
             { newValue: Boolean ->
                 scope.launch {
-                    val ok = SuSFSConfigHelper.hideSusMntsForNonSuProcs(newValue)
+                    val ok = awaitSuSFSBoolean(configHelper) { reply ->
+                        SuSFSUiAction.HideSusMnts(newValue, reply)
+                    }
                     if (ok) {
                         hideSusMntsEnabled = newValue
                     } else {
-                        snackbarHost.showSnackbar(operationFailedMsg)
+                        snackbarHost.showReplacingSnackbar(operationFailedMsg)
                     }
                 }
             }
@@ -203,13 +215,15 @@ fun StandardFeaturesTab(
                 scope.launch {
                     isLoading = true
                     try {
-                        val ok = SuSFSConfigHelper.setUname(r, v)
+                        val ok = awaitSuSFSBoolean(configHelper) { reply ->
+                            SuSFSUiAction.SetUname(r, v, reply)
+                        }
                         if (ok) {
                             unameVersion = v
                             unameRelease = r
                             showUnameDialog = false
                         } else {
-                            snackbarHost.showSnackbar(operationFailedMsg)
+                            snackbarHost.showReplacingSnackbar(operationFailedMsg)
                         }
                     } finally {
                         isLoading = false
@@ -224,14 +238,16 @@ fun StandardFeaturesTab(
             val p = cmdlineInput.text.toString().trim()
                 scope.launch {
                     isLoading = true
-                    val ok = SuSFSConfigHelper.setCmdlineOrBootconfig(p)
+                    val ok = awaitSuSFSBoolean(configHelper) { reply ->
+                        SuSFSUiAction.SetCmdlineOrBootconfig(p, reply)
+                    }
                     if (ok) {
                         cmdlineOrBootconfig = p
                         showCmdlineDialog = false
                     } else {
                         isLoading = false
                         scope.launch {
-                            snackbarHost.showSnackbar(operationFailedMsg)
+                            snackbarHost.showReplacingSnackbar(operationFailedMsg)
                         }
                     }
                     isLoading = false
@@ -467,7 +483,7 @@ fun StandardFeaturesTab(
                                                         title = slot.slotName,
                                                         description = "${slot.uname}\n${slot.buildTime}",
                                                         selected = selected,
-                                                        renderBackgroundBlur = false,
+                                                        isOnBackground = false,
                                                         onClick = {
                                                             selectedSlotName = slot.slotName
                                                         },
