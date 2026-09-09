@@ -106,7 +106,6 @@ jobs:
       - name: Unshallow KernelSU submodule
         working-directory: kernel/KernelSU
         run: git fetch --unshallow || true
-          submodules: recursive
 
       - name: Free up disk space
         run: |
