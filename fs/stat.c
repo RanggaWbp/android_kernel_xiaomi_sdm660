@@ -126,7 +126,7 @@ EXPORT_SYMBOL(vfs_fstat);
 #ifdef CONFIG_KSU_SUSFS
 extern struct static_key_true ksu_su_compat_enabled;
 extern bool __ksu_is_allow_uid_for_current(uid_t uid);
-extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
+extern int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);
 #if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
 #endif
 #endif
@@ -142,8 +142,13 @@ int vfs_fstatat(int dfd, const char __user *filename, struct kstat *stat,
 	if (likely(susfs_is_current_proc_umounted()))
 		goto orig_flow;
 	if (static_branch_likely(&ksu_su_compat_enabled)) {
-		if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val)))
-			ksu_handle_stat(&dfd, &filename, &flag);
+		if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val))) {
+			struct filename *ksu_fname = getname(filename);
+			if (!IS_ERR(ksu_fname)) {
+				ksu_handle_stat(&dfd, &ksu_fname, &flag);
+				putname(ksu_fname);
+			}
+		}
 	}
 orig_flow:
 #endif

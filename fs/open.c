@@ -345,8 +345,13 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
  */
 #if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_SUSFS)
 __attribute__((hot))
+#ifdef CONFIG_KSU_SUSFS
+extern int ksu_handle_faccessat(int *dfd, struct filename **filename,
+				int *mode, int *flags);
+#else
 extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user,
 				int *mode, int *flags);
+#endif
 #endif
 SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
 {
@@ -358,7 +363,17 @@ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
 	int res;
 	unsigned int lookup_flags = LOOKUP_FOLLOW;
 #if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_SUSFS)
+#ifdef CONFIG_KSU_SUSFS
+	{
+		struct filename *ksu_fname = getname(filename);
+		if (!IS_ERR(ksu_fname)) {
+			ksu_handle_faccessat(&dfd, &ksu_fname, &mode, NULL);
+			putname(ksu_fname);
+		}
+	}
+#else
 	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
+#endif
 #endif
 
 	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
