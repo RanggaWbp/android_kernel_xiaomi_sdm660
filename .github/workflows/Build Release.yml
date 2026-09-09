@@ -35,6 +35,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          submodules: recursive
+
+      - name: Unshallow KernelSU submodule
+        working-directory: KernelSU
+        run: git fetch --unshallow || true
+          submodules: recursive
 
       - name: Free up disk space
         run: |
