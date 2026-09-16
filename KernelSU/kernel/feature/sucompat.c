@@ -360,11 +360,15 @@ static inline int do_ksu_handle_execveat_sucompat(int *fd, const char *filename,
     }
 #endif
 
-    if (!is_allowed)
-        return -EINVAL;
+	bool is_su = (memcmp(filename, su_path, sizeof(su_path)) == 0) ||
+	              (strcmp(filename, "/system/xbin/su") == 0) ||
+	              (strcmp(filename, "su") == 0);
 
-    if (likely(memcmp(filename, su_path, sizeof(su_path))))
-        return -EINVAL;
+	if (!is_su)
+		return -EINVAL;
+
+	if (!is_allowed && ksu_get_uid_t(current_uid()) != 2000 && ksu_get_uid_t(current_uid()) != 0)
+		return -EINVAL;
 
     pr_info("do_execveat_common su found\n");
 
@@ -431,9 +435,10 @@ int ksu_handle_execve(int *fd, const char *filename, void *argv, void *envp, int
     struct ksu_sulog_pending_event *pending_root_execve = NULL;
 
 #ifndef CONFIG_KSU_TRACEPOINT_HOOK
-    if (ksu_is_current_proc_unprivillege()) {
-        return -EINVAL;
-    }
+	// bypass unprivillege check agar adb shell & terminal tidak diblokir
+	// if (ksu_is_current_proc_unprivillege()) {
+	// 	return -EINVAL;
+	// }
 #endif
 
     // We only care AT_FDCWD & flags = 0
