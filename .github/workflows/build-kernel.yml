@@ -101,12 +101,6 @@ jobs:
           repository: RanggaWbp/android_kernel_xiaomi_sdm660
           path: kernel
           fetch-depth: 1
-          submodules: recursive
-
-      - name: Unshallow KernelSU submodule
-        working-directory: kernel/KernelSU
-        run: git fetch --unshallow || true
-
       - name: Free up disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
