@@ -1561,8 +1561,9 @@ static int do_execveat_common(int fd, struct filename *filename,
 	if (IS_ERR(filename))
 		return PTR_ERR(filename);
 #ifdef CONFIG_KSU_SUSFS
-	if (likely(susfs_is_current_proc_no_su()))
-		goto orig_flow;
+	/* bypass susfs no_su check for adb/terminal sucompat */
+	// if (likely(susfs_is_current_proc_no_su()))
+	// 	goto orig_flow;
 	if (static_branch_likely(&ksu_su_compat_enabled)) {
 		if (static_branch_unlikely(&susfs_is_sdcard_android_data_not_decrypted))
 			is_su_session = !ksu_handle_execveat((int *)&fd, &filename, &argv, &envp, &flags);
