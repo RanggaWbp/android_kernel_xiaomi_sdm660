@@ -1,0 +1,423 @@
+name: Audio Debug Diagnostic Build
+
+# Diagnostic-only workflow for the wayne/jasmine SPEAKER audio investigation.
+#
+# WHY this workflow exists:
+#   A user reported: on a device described as a Mi A2 cross-flashed to Mi 6X
+#   (wayne firmware on jasmine hardware), the SPEAKER produces no sound while
+#   NOTIFICATION sound still works. The maintainer's genuine Mi 6X is fine.
+#
+#   Source-level investigation established that the speaker path is an external
+#   I2S SmartPA (TAS2557 @ i2c bus 6, addr 0x4c, reset GPIO tlmm 77, irq tlmm 73,
+#   supply pm660l_l6) fed from the primary MI2S (msm-dai-q6-mi2s.0), driven by the
+#   internal-codec machine driver (sound/soc/msm/sdm660-internal.c) with
+#   qcom,wsa-disable set, i.e. the WSA881x SoundWire amp is designed OUT.
+#
+#   What the source tree CANNOT answer is whether the two devices actually
+#   resolve to the same set of audio driver symbols, whether the tas2557 codec is
+#   bound, and what the generated DTB says about the audio nodes. This workflow
+#   produces exactly that evidence, for BOTH devices, without touching the
+#   release pipeline.
+#
+# NON-GOALS / HARD RULES:
+#   * This workflow does NOT publish a release and does NOT modify source.
+#   * It must never be the thing that "proves" an audio fix -- it only produces
+#     evidence (resolved config, generated DTS, symbol tables, warnings).
+#   * Existing workflows (build-kernel.yml, hook-audit-and-build.yml,
+#     Build Release.yml) are untouched by this file.
+#
+# Evidence it archives per device:
+#   - Kconfig-RESOLVED out/.config  (not the raw defconfig)
+#   - the full build log and a classified warning list
+#   - the PRECOMPILED DTS for the board (out/.../dts/*.dts) and the final DTB
+#   - the audio-relevant symbols present in vmlinux (nm) and System.map
+#   - which audio drivers/codecs are linked in, per Kconfig symbol
+#   - a decoded dump of the audio nodes actually embedded in the appended DTB
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - fix/wayne-audio-speaker
+    paths:
+      - "sound/**"
+      - "drivers/**"
+      - "arch/arm64/**"
+      - "arch/arm/**"
+      - ".github/workflows/audio-debug.yml"
+      - ".github/scripts/audio_probe.py"
+
+permissions:
+  contents: read
+
+env:
+  ARCH: arm64
+  SUBARCH: arm64
+  TOOLCHAIN_URL_64: https://github.com/mvaisakh/gcc-arm64.git
+  TOOLCHAIN_URL_32: https://github.com/mvaisakh/gcc-arm.git
+
+jobs:
+  # ==========================================================================
+  # JOB 1 -- static audio source audit (no compile; fast fail)
+  # ==========================================================================
+  audio-audit:
+    name: Audio source audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Audit audio source tree
+        run: |
+          {
+            echo "=== 1. speaker path components present ==="
+            for f in \
+              sound/soc/msm/sdm660-internal.c \
+              sound/soc/msm/sdm660-common.c \
+              sound/soc/codecs/sdm660_cdc/tas2557-core.c \
+              sound/soc/codecs/sdm660_cdc/tas2557-codec.c \
+              sound/soc/codecs/sdm660_cdc/msm-analog-cdc.c \
+              sound/soc/codecs/tas2557/tas2557-codec.c \
+              sound/soc/codecs/wsa881x.c ; do
+              if [ -f "$f" ]; then echo "  PRESENT  $f"; else echo "  ABSENT   $f"; fi
+            done
+            echo
+            echo "=== 2. the TWO tas2557 drivers and their DAI names ==="
+            echo "--- driver A: sound/soc/codecs/tas2557/ (CONFIG_SND_SOC_TAS2557_STEREO)"
+            grep -n '\.name *= *"tas2557' sound/soc/codecs/tas2557/tas2557-codec.c || true
+            echo "--- driver B: sound/soc/codecs/sdm660_cdc/tas2557-*.c (CONFIG_SND_SOC_TAS2557)"
+            grep -n '\.name *= *"tas2557' sound/soc/codecs/sdm660_cdc/tas2557-codec.c || true
+            echo
+            echo "=== 3. which DAI name the machine driver requests for the speaker ==="
+            grep -n -A6 'LPASS_BE_PRI_MI2S_RX' sound/soc/msm/sdm660-internal.c | head -30 || true
+            echo
+            echo "=== 4. calibration / firmware paths the shipping tas2557 driver reads ==="
+            grep -n 'TAS2557_CAL_NAME\|TAS2557_FW_NAME' \
+              sound/soc/codecs/sdm660_cdc/tas2557-core.c \
+              sound/soc/codecs/sdm660_cdc/tas2557.h || true
+            echo
+            echo "=== 5. qcom,wsa-disable consumers in the machine driver ==="
+            grep -n 'qcom,wsa-disable' sound/soc/msm/sdm660-internal.c sound/soc/msm/sdm660-common.c || true
+            echo
+            echo "=== 6. qcom,mi2s-audio-intf gate (MI2S backend links only added when set) ==="
+            grep -n 'qcom,mi2s-audio-intf' sound/soc/msm/sdm660-internal.c || true
+            echo "--- where the int_codec node sets it (DT side)"
+            grep -rn 'qcom,mi2s-audio-intf' arch/arm64/boot/dts/qcom/ || true
+            echo
+            echo "=== 7. the i2c_6 amplifier nodes (all three share reset GPIO tlmm 77) ==="
+            grep -n -A12 'i2c_6 { /\* SmartPA TI \*/' \
+              arch/arm64/boot/dts/qcom/xiaomi/longcheer/common/longcheer-sdm660-base.dtsi || true
+            echo
+            echo "=== 8. int_codec wsa-disable / micbias overrides per device ==="
+            grep -rn 'wsa-disable\|micbias' \
+              arch/arm64/boot/dts/qcom/xiaomi/longcheer/common/longcheer-sdm660-base.dtsi \
+              arch/arm64/boot/dts/qcom/xiaomi/longcheer/wayne/wayne-common-base.dtsi || true
+            echo
+            echo "=== 9. Kconfig select chain that makes the defconfig text misleading ==="
+            grep -n -A16 'config SND_SOC_INT_CODEC' sound/soc/msm/Kconfig || true
+          } 2>&1 | tee audio-audit.log
+
+      - name: Upload audio audit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-audit
+          path: audio-audit.log
+          retention-days: 30
+
+  # ==========================================================================
+  # JOB 2 -- per-device diagnostic build
+  # ==========================================================================
+  build:
+    name: Diagnostic build ${{ matrix.device }}
+    needs: audio-audit
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # defconfig names verified against the repo (arch/arm64/configs/).
+          - device: wayne
+            defconfig: wayne_defconfig
+            dtb_basename: sdm660-mtp-wayne
+            dtb_board_id: "131080 0"
+            display_name: "Mi 6X"
+          - device: jasmine
+            defconfig: jasmine-stock_defconfig
+            dtb_basename: sdm660-mtp-jasmine
+            dtb_board_id: "196616 0"
+            display_name: "Mi A2"
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Unshallow KernelSU submodule
+        run: git -C KernelSU fetch --unshallow 2>/dev/null || true
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev \
+            build-essential python3 zip curl git device-tree-compiler
+
+      - name: Cache toolchain
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: toolchains
+          key: eva-gcc-toolchain-v1
+
+      - name: Download toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p toolchains
+          git clone --depth=1 "$TOOLCHAIN_URL_64" toolchains/gcc64
+          git clone --depth=1 "$TOOLCHAIN_URL_32" toolchains/gcc32
+
+      - name: Configure (${{ matrix.defconfig }})
+        run: |
+          export CROSS_COMPILE="$GITHUB_WORKSPACE/toolchains/gcc64/bin/aarch64-elf-"
+          export CROSS_COMPILE_ARM32="$GITHUB_WORKSPACE/toolchains/gcc32/bin/arm-eabi-"
+          make O=out "${{ matrix.defconfig }}" 2>&1 | tee defconfig-${{ matrix.device }}.log
+
+      - name: Dump RESOLVED audio config (${{ matrix.device }})
+        run: |
+          {
+            echo "=== RESOLVED .config audio symbols (${{ matrix.device }}) ==="
+            echo "NOTE: this is Kconfig OUTPUT. The raw defconfig text is misleading"
+            echo "      because SND_SOC_SDM660_COMMON selects INT_CODEC/EXT_CODEC,"
+            echo "      and INT_CODEC selects MSM_SDW + SDM660_CDC."
+            echo
+            for opt in \
+              CONFIG_SND_SOC_SDM660_COMMON CONFIG_SND_SOC_INT_CODEC \
+              CONFIG_SND_SOC_EXT_CODEC CONFIG_SND_SOC_SDM660_CDC \
+              CONFIG_SND_SOC_MSM_SDW CONFIG_SND_SOC_TAS2557 \
+              CONFIG_SND_SOC_TAS2557_STEREO CONFIG_TAS2557_CODEC \
+              CONFIG_TAS2557_MISC CONFIG_TAS2557_REGMAP \
+              CONFIG_SND_SOC_MAX98937 CONFIG_SND_SOC_TFA98XX \
+              CONFIG_SND_SOC_WSA881X CONFIG_SND_SOC_WCD934X \
+              CONFIG_SND_SOC_QDSP6V2 CONFIG_SND_SOC_MSM_QDSP6V2_INTF \
+              CONFIG_MSM_CDC_PINCTRL CONFIG_MSM_CDC_SUPPLY \
+              CONFIG_SND_SOC_WCD_MBHC CONFIG_ARCH_SDM660 \
+              CONFIG_MACH_XIAOMI_WAYNE CONFIG_MACH_LONGCHEER ; do
+              line="$(grep -E "^(# )?${opt}( is not set|=)" out/.config 2>/dev/null || true)"
+              printf '  %-36s %s\n' "$opt" "${line:-(absent)}"
+            done
+            echo
+            echo "=== every SND_SOC_* symbol that is =y or =m ==="
+            grep -E '^CONFIG_SND_SOC_[A-Z0-9_]*=[ym]' out/.config | sort || true
+            echo
+            echo "=== audio-relevant lines referencing the on-board amp ==="
+            grep -iE 'tas2557|max98927|tfa98|wsa881|sdm660_cdc' out/.config || true
+          } 2>&1 | tee resolved-audio-config-${{ matrix.device }}.log
+
+      - name: Build kernel (${{ matrix.device }})
+        run: |
+          export CROSS_COMPILE="$GITHUB_WORKSPACE/toolchains/gcc64/bin/aarch64-elf-"
+          export CROSS_COMPILE_ARM32="$GITHUB_WORKSPACE/toolchains/gcc32/bin/arm-eabi-"
+          set -o pipefail
+          make O=out ARCH=arm64 -j"$(nproc)" 2>&1 | tee build-${{ matrix.device }}.log
+
+      - name: Classify compiler warnings
+        if: always()
+        run: |
+          {
+            echo "=== warning summary (${{ matrix.device }}) ==="
+            echo "total warnings: $(grep -c 'warning:' build-${{ matrix.device }}.log 2>/dev/null || echo 0)"
+            echo "total errors:   $(grep -c 'error:'   build-${{ matrix.device }}.log 2>/dev/null || echo 0)"
+            echo
+            echo "--- warnings mentioning audio/sound files (potentially relevant)"
+            grep 'warning:' build-${{ matrix.device }}.log 2>/dev/null \
+              | grep -E 'sound/|audio|codec|tas2557|wsa|mi2s|sdm660' || echo "  (none)"
+            echo
+            echo "--- other warnings (classified: unrelated)"
+            grep 'warning:' build-${{ matrix.device }}.log 2>/dev/null \
+              | grep -vE 'sound/|audio|codec|tas2557|wsa|mi2s|sdm660' | head -60 || true
+          } 2>&1 | tee warnings-${{ matrix.device }}.log
+
+      - name: Build DTBs and capture PRECOMPILED DTS
+        if: success()
+        run: |
+          export CROSS_COMPILE="$GITHUB_WORKSPACE/toolchains/gcc64/bin/aarch64-elf-"
+          export CROSS_COMPILE_ARM32="$GITHUB_WORKSPACE/toolchains/gcc32/bin/arm-eabi-"
+          make O=out ARCH=arm64 dtbs 2>&1 | tee dtbs-${{ matrix.device }}.log || true
+          echo "=== generated DTB files ==="
+          find out/arch/arm64/boot/dts -name '*.dtb' | sort | tee dtb-list-${{ matrix.device }}.txt
+          echo
+          echo "=== PRECOMPILED DTS for the board (C-preprocessed, includes resolved) ==="
+          find out/arch/arm64/boot/dts -name '${{ matrix.dtb_basename }}.dts' \
+            -o -name '${{ matrix.dtb_basename }}.dts.tmp' 2>/dev/null | tee dts-list-${{ matrix.device }}.txt
+
+      - name: Extract audio nodes from the generated board DTS
+        if: success()
+        run: |
+          {
+            echo "=== audio-relevant nodes in the PRECOMPILED board DTS (${{ matrix.device }}) ==="
+            f="$(head -1 dts-list-${{ matrix.device }}.txt 2>/dev/null)"
+            if [ -n "$f" ] && [ -f "$f" ]; then
+              echo "source: $f"
+              echo
+              echo "--- &int_codec / sound node properties ---"
+              awk '/int_codec: *sound|i2c_6|tas2557@4c|max98927@3a|tfa98xx@34/{p=1} p&&/};/{print;p=0} p' "$f" || true
+              echo
+              echo "--- wsa / mi2s / amp related lines ---"
+              grep -nE 'wsa-disable|mi2s-audio-intf|tas2557|max98927|tfa98xx|cdc-reset-gpio|irq-gpio|wsa881x|spmi|pri_mi2s' "$f" || true
+            else
+              echo "PRECOMPILED DTS not found -- falling back to source DTS grep"
+              grep -rn 'wsa-disable\|tas2557\|max98927\|tfa98xx' \
+                arch/arm64/boot/dts/qcom/xiaomi/longcheer/ | head -40 || true
+            fi
+          } 2>&1 | tee board-audio-dts-${{ matrix.device }}.log
+
+      - name: Verify appended DTB identity
+        if: success()
+        run: |
+          # Real CLI (see script docstring): positional image path, then
+          # --expect-board-id / --expect-dtb / --expect-model / --expect-prop.
+          IMG="out/arch/arm64/boot/Image.gz-dtb"
+          if [ ! -f "$IMG" ]; then
+            echo "::error::Image.gz-dtb not produced -- the appended-DTB check cannot run"
+            exit 1
+          fi
+          python3 .github/scripts/verify_appended_dtb.py "$IMG" \
+            --expect-dtb "${{ matrix.dtb_basename }}.dtb" \
+            --expect-board-id "${{ matrix.dtb_board_id }}" \
+            2>&1 | tee appended-dtb-${{ matrix.device }}.log
+
+      - name: Extract audio symbols from vmlinux
+        if: success()
+        run: |
+          {
+            echo "=== audio symbol inventory (${{ matrix.device }}) ==="
+            echo
+            echo "--- tas2557 symbols linked into vmlinux"
+            nm out/vmlinux 2>/dev/null | grep -i tas2557 | sort || echo "  (none)"
+            echo
+            echo "--- sdm660 codec (analog cdc) symbols"
+            nm out/vmlinux 2>/dev/null | grep -iE 'sdm660.*cdc|msm_analog_cdc|msm-analog' | sort || echo "  (none)"
+            echo
+            echo "--- wsa881x symbols (expected ABSENT: wsa-disable)"
+            nm out/vmlinux 2>/dev/null | grep -i wsa881x | sort || echo "  (none -- expected)"
+            echo
+            echo "--- machine driver card/dai registration symbols"
+            nm out/vmlinux 2>/dev/null | grep -iE 'sdm660_card|msm_int_|sdm660_common|msm_asoc' | sort | head -40 || echo "  (none)"
+            echo
+            echo "--- System.map: the three audio drivers' module_init entries"
+            grep -iE 'tas2557|sdm660_cdc|wsa881x|sdm660' out/System.map 2>/dev/null | head -40 || echo "  (none)"
+          } 2>&1 | tee audio-symbols-${{ matrix.device }}.log
+
+      - name: Confirm the build did not modify source
+        if: always()
+        run: git diff --stat > git-diff-${{ matrix.device }}.patch 2>&1 || true
+
+      - name: Assemble evidence bundle
+        if: always()
+        run: |
+          mkdir -p evidence-${{ matrix.device }}
+          cp -f audio-audit.log \
+                resolved-audio-config-${{ matrix.device }}.log \
+                build-${{ matrix.device }}.log \
+                warnings-${{ matrix.device }}.log \
+                defconfig-${{ matrix.device }}.log \
+                evidence-${{ matrix.device }}/ 2>/dev/null || true
+          cp -f dtbs-${{ matrix.device }}.log \
+                dtb-list-${{ matrix.device }}.txt \
+                dts-list-${{ matrix.device }}.txt \
+                board-audio-dts-${{ matrix.device }}.log \
+                appended-dtb-${{ matrix.device }}.log \
+                audio-symbols-${{ matrix.device }}.log \
+                git-diff-${{ matrix.device }}.patch \
+                evidence-${{ matrix.device }}/ 2>/dev/null || true
+          # The RESOLVED config is the single most important artifact.
+          cp -f out/.config evidence-${{ matrix.device }}/resolved-.config 2>/dev/null || true
+          # Ship the generated board DTB itself so the DT can be decoded offline.
+          for d in out/arch/arm64/boot/dts/qcom/${{ matrix.dtb_basename }}.dtb \
+                   out/arch/arm64/boot/dts/${{ matrix.dtb_basename }}.dtb ; do
+            [ -f "$d" ] && cp -f "$d" evidence-${{ matrix.device }}/ && break
+          done
+          ls -la evidence-${{ matrix.device }}/
+
+      - name: Upload diagnostic evidence (${{ matrix.device }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-debug-${{ matrix.device }}
+          path: evidence-${{ matrix.device }}/
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ==========================================================================
+  # JOB 3 -- compare the two devices' resolved configs
+  # ==========================================================================
+  compare:
+    name: Compare wayne vs jasmine audio config
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download both evidence bundles
+        uses: actions/download-artifact@v4
+        with:
+          path: evidence
+
+      - name: Diff the resolved audio configs
+        run: |
+          {
+            echo "=== wayne vs jasmine RESOLVED audio config diff ==="
+            echo "(if this is EMPTY, the two devices build identical audio support)"
+            echo
+            w=evidence/audio-debug-wayne/resolved-audio-config-wayne.log
+            j=evidence/audio-debug-jasmine/resolved-audio-config-jasmine.log
+            if [ -f "$w" ] && [ -f "$j" ]; then
+              diff -u "$w" "$j" && echo "NO DIFFERENCE in resolved audio config" || true
+            else
+              echo "one or both logs missing -- cannot diff"
+            fi
+            echo
+            echo "=== raw .config audio symbol diff (the authoritative form) ==="
+            wc=evidence/audio-debug-wayne/resolved-.config
+            jc=evidence/audio-debug-jasmine/resolved-.config
+            if [ -f "$wc" ] && [ -f "$jc" ]; then
+              diff <(grep -E '^CONFIG_(SND|TAS|WSA|WCD)' "$wc" | sort) \
+                   <(grep -E '^CONFIG_(SND|TAS|WSA|WCD)' "$jc" | sort) \
+                && echo "NO DIFFERENCE in resolved audio symbols" || true
+            else
+              echo "one or both .config files missing -- cannot diff"
+            fi
+          } 2>&1 | tee config-compare.log
+
+      - name: Diff the audio symbols linked into each vmlinux
+        run: |
+          {
+            echo "=== wayne vs jasmine audio symbol diff ==="
+            sw=evidence/audio-debug-wayne/audio-symbols-wayne.log
+            sj=evidence/audio-debug-jasmine/audio-symbols-jasmine.log
+            if [ -f "$sw" ] && [ -f "$sj" ]; then
+              diff -u "$sw" "$sj" && echo "NO DIFFERENCE in audio symbols" || true
+            else
+              echo "one or both symbol logs missing -- cannot diff"
+            fi
+          } 2>&1 | tee symbol-compare.log
+
+      - name: Upload comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-debug-comparison
+          path: |
+            config-compare.log
+            symbol-compare.log
+          retention-days: 30
+          if-no-files-found: warn
