@@ -19,7 +19,7 @@ on:
       - "patches/**"
       - "scripts/apply_oc_overrides.sh"
       - "scripts/validate_oc_config.sh"
-      # Kernel source that carries the ReSukiSU/SUSFS/Re:Kernel/BBG/NoMount
+      # Kernel source that carries the BakaSU/SUSFS/Re:Kernel/BBG/NoMount
       # integration. Without these, a kernel fix (e.g. the su/stat redirect)
       # would never produce a new flashable release -- that is exactly why the
       # su fix had to be released manually via workflow_dispatch.
@@ -299,7 +299,7 @@ jobs:
 
       # ---------------------------------------------------------------
       # 9. PACKAGE AnyKernel3 -- siap flash langsung, tanpa ekstrak.
-      #    Tag ReSukiSU + SUSFS dicantumkan di kernel.string biar keliatan
+      #    Tag BakaSU + SUSFS dicantumkan di kernel.string biar keliatan
       #    di recovery/flasher app.
       # ---------------------------------------------------------------
       - name: Package AnyKernel3 zip
@@ -315,7 +315,7 @@ jobs:
           cat > anykernel.sh << EOF
           ### AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: ReSukiSU + SUSFS + Re:Kernel + NoMount + BBG + EAS | by RanggaWbp | ${{ env.BUILD_DATE }}
+          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU + SUSFS + Re:Kernel + NoMount + BBG + EAS | by RanggaWbp | ${{ env.BUILD_DATE }}
           do.devicecheck=1
           do.modules=0
           do.systemless=1
@@ -345,10 +345,10 @@ jobs:
 
           SHORT_SHA="$(cd ../kernel && git rev-parse --short HEAD)"
           # ARTIFACT_NAME tetap dari conf (single source of truth), tapi
-          # setiap zip otomatis dapet suffix ReSukiSU-SUSFS -- kernel source
+          # setiap zip otomatis dapet suffix BakaSU-SUSFS -- kernel source
           # ini memang sudah support keduanya, jadi tidak perlu edit satu-satu
           # ARTIFACT_NAME= di 10 file conf.
-          ZIP_NAME="${{ env.ARTIFACT_NAME }}-ReSukiSU-SUSFS-${SHORT_SHA}-${{ env.BUILD_DATE }}.zip"
+          ZIP_NAME="${{ env.ARTIFACT_NAME }}-BakaSU-SUSFS-${SHORT_SHA}-${{ env.BUILD_DATE }}.zip"
           zip -r9 "../${ZIP_NAME}" . -x ".git/*" ".github/*" "*.md"
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
@@ -438,7 +438,7 @@ jobs:
 
             | Feature | Description |
             | :------ | :---------- |
-            | **ReSukiSU** | Kernel-based root solution |
+            | **BakaSU** | Kernel-based root solution |
             | **SUSFS** | Root-hiding filesystem layer |
             | **Re:Kernel** | Kernel-level hardening |
             | **NoMount** | Mount namespace isolation |

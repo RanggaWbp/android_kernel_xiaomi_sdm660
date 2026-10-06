@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Skrip pengecekan integrasi ReSukiSU (KernelSU fork) untuk
+Skrip pengecekan integrasi BakaSU (KernelSU fork) untuk
 android_kernel_xiaomi_sdm660.
 
 Cara pakai:
@@ -50,7 +50,7 @@ def section(title):
 # ---------------------------------------------------------------
 # 1. Update submodule KernelSU
 # ---------------------------------------------------------------
-section("1. Update submodule KernelSU (ReSukiSU)")
+section("1. Update submodule KernelSU (BakaSU)")
 
 ks_path = os.path.join(REPO, "KernelSU")
 if not os.path.isdir(ks_path):
@@ -88,7 +88,7 @@ def has(content, pattern):
 # ---------------------------------------------------------------
 # 2. Manual hooks wajib
 # ---------------------------------------------------------------
-section("2. Manual hooks (wajib menurut resukisu.org/guide/manual-integrate.html)")
+section("2. Manual hooks (wajib menurut bakasu.org/guide/manual-integrate.html)")
 
 # --- stat hook ---
 stat_c = read("fs/stat.c")
@@ -104,7 +104,7 @@ else:
     if ok_fstat:
         log(OK, "stat hook (return value): ksu_handle_newfstat_ret/vfs_fstat terpasang")
     else:
-        log(WARN, "stat hook (return value): ksu_handle_newfstat_ret()/ksu_handle_vfs_fstat() tidak ditemukan — cek manual apakah versi ReSukiSU baru masih butuh ini")
+        log(WARN, "stat hook (return value): ksu_handle_newfstat_ret()/ksu_handle_vfs_fstat() tidak ditemukan — cek manual apakah versi BakaSU baru masih butuh ini")
 
 # --- execve hook ---
 exec_c = read("fs/exec.c")
@@ -303,6 +303,6 @@ for status, judul, detail in report:
 
 print(f"\nTotal: {ok_count} OK, {warn_count} perlu diperiksa, {fail_count} hilang/wajib diperbaiki.")
 if fail_count:
-    print("Ada item berstatus [HILANG] yang menurut dokumentasi ReSukiSU WAJIB ada, kompilasi kemungkinan besar akan gagal / root tidak berfungsi kalau tidak dibereskan.")
+    print("Ada item berstatus [HILANG] yang menurut dokumentasi BakaSU WAJIB ada, kompilasi kemungkinan besar akan gagal / root tidak berfungsi kalau tidak dibereskan.")
 else:
     print("Tidak ada hook wajib yang hilang. Item [PERIKSA] sifatnya rekomendasi/perlu ditinjau manual, bukan kesalahan pasti.")

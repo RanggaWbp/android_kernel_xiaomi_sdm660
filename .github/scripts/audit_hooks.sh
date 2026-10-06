@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
-# audit_hooks.sh -- ReSukiSU / SUSFS Inline Hook integration audit
+# audit_hooks.sh -- BakaSU / SUSFS Inline Hook integration audit
 #
-# Mirrors the EXACT checks performed by ReSukiSU upstream:
+# Mirrors the EXACT checks performed by BakaSU upstream:
 #   drivers/kernelsu/tools/inline_hook_check.mk   (CONFIG_KSU_SUSFS selected)
 #   drivers/kernelsu/tools/manual_hook_check.mk   (CONFIG_KSU_MANUAL_HOOK selected)
 #
-# IMPORTANT: drivers/kernelsu is a SYMLINK to KernelSU/kernel (ReSukiSU
+# IMPORTANT: drivers/kernelsu is a SYMLINK to KernelSU/kernel (BakaSU
 # submodule). A recursive `grep -R drivers/` follows that symlink and scans
-# upstream ReSukiSU sources, which legitimately contain CONFIG_KSU_MANUAL_HOOK
+# upstream BakaSU sources, which legitimately contain CONFIG_KSU_MANUAL_HOOK
 # (lsm_hooks.c, ksud_integration.c, Kbuild, manual_hook_check.mk, ...). Those
 # hits are NOT manual-hook guards in this kernel. Upstream only ever greps the
 # seven kernel files listed below, so this script does the same.
@@ -51,7 +51,7 @@ INCOMPATIBLE_TABLE=(
 )
 
 hr
-echo "== ReSukiSU / SUSFS Inline Hook audit =="
+echo "== BakaSU / SUSFS Inline Hook audit =="
 echo "srctree : $SRCTREE"
 echo "commit  : $(git rev-parse HEAD 2>/dev/null || echo unknown)"
 hr
@@ -85,7 +85,7 @@ done
 if [ "${#GUARD_FILES[@]}" -gt 0 ]; then
   echo
   echo "  ::error::KSU_MANUAL_HOOK guard detected in: ${GUARD_FILES[*]}"
-  echo "  ReSukiSU/susfs_inline: WARNING: Your build maybe broken."
+  echo "  BakaSU/susfs_inline: WARNING: Your build maybe broken."
 else
   echo
   echo "  No KSU_MANUAL_HOOK guard in any of the 7 inspected kernel files."
@@ -143,7 +143,7 @@ echo
 hr
 echo "[4] Repo-wide KSU_MANUAL_HOOK scan (symlink-safe)"
 echo "    'grep -r' does NOT follow symlinks; drivers/kernelsu is excluded"
-echo "    because it resolves to the ReSukiSU submodule."
+echo "    because it resolves to the BakaSU submodule."
 echo
 
 SCAN_HITS="$(grep -rn "CONFIG_KSU_MANUAL_HOOK" \
@@ -180,7 +180,7 @@ check_present() {
   if [ -e "$2" ]; then echo "  ok            $1  ($2)"; else echo "  MISSING       $1  ($2)"; FAIL=1; fi
 }
 
-check_present "ReSukiSU submodule"  "KernelSU/kernel/Kbuild"
+check_present "BakaSU submodule"  "KernelSU/kernel/Kbuild"
 check_present "SUSFS source"        "fs/susfs.c"
 check_present "SUSFS header"        "include/linux/susfs.h"
 check_present "SUSFS Kconfig"       "fs/Kconfig" 
@@ -217,7 +217,7 @@ check_wiring() {
 check_wiring "NoMount"   "fs/nomount/Kconfig"          "fs/Makefile"                 "nomount/"
 check_wiring "Re:Kernel" "drivers/net/rekernel/Kconfig" "drivers/net/Makefile"        "rekernel/"
 check_wiring "BBG"       "security/baseband-guard/Kconfig" "security/Makefile"        "baseband-guard/"
-check_wiring "ReSukiSU"  "drivers/kernelsu/Kconfig"    "drivers/Makefile"            "kernelsu/"
+check_wiring "BakaSU"  "drivers/kernelsu/Kconfig"    "drivers/Makefile"            "kernelsu/"
 
 # --- board symbol required for the device trees ---------------------------
 # arch/arm/boot/dts/qcom/Makefile gates sdm660-mtp-wayne.dtb AND
@@ -264,7 +264,7 @@ for dc in arch/arm64/configs/wayne_defconfig arch/arm64/configs/jasmine-stock_de
   else
     echo "      ok            CONFIG_KSU_MANUAL_HOOK not enabled"
   fi
-  # ReSukiSU main HEAD (>= 3d1185d8) calls ksu_get_session_keyring(), whose
+  # BakaSU main HEAD (>= 3d1185d8) calls ksu_get_session_keyring(), whose
   # 4.4 branch dereferences cred->session_keyring. In this tree that field only
   # exists inside `#ifdef CONFIG_KEYS` (include/linux/cred.h), so a defconfig
   # without CONFIG_KEYS fails to compile the KernelSU submodule outright.

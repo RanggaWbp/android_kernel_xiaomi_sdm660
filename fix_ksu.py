@@ -173,6 +173,6 @@ if changed_files:
     print("  1. Jalankan ulang cek_ksu.py untuk pastikan semua [HILANG] sudah jadi [OK]")
     print("  2. Coba build kernel seperti biasa")
     print("  3. Kalau build sukses:")
-    print("     git add -A && git commit -m \"fix: export required SELinux symbols for ReSukiSU + defconfig cleanup\"")
+    print("     git add -A && git commit -m \"fix: export required SELinux symbols for BakaSU + defconfig cleanup\"")
 else:
     print("Tidak ada perubahan yang dilakukan (semua sudah benar atau pola tidak cocok).")

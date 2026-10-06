@@ -95,7 +95,7 @@ jobs:
           cat > anykernel.sh << EOF
           ### AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=Custom Kernel for ${{ matrix.display_name }} (${{ matrix.device }}) | features: ReSukiSU + SUSFS + Re:Kernel + NoMount + BBG + EAS | by RanggaWbp | ${BUILD_DATE}
+          kernel.string=Custom Kernel for ${{ matrix.display_name }} (${{ matrix.device }}) | features: BakaSU + SUSFS + Re:Kernel + NoMount + BBG + EAS | by RanggaWbp | ${BUILD_DATE}
           do.devicecheck=1
           do.modules=0
           do.systemless=1
@@ -123,7 +123,7 @@ jobs:
           write_boot;
           EOF
           TAG_NAME="${GITHUB_REF_NAME}"
-          ZIP_NAME="${{ matrix.model_prefix }}-ReSukiSU-SUSFS-${{ matrix.device }}-${TAG_NAME}-${BUILD_DATE}.zip"
+          ZIP_NAME="${{ matrix.model_prefix }}-BakaSU-SUSFS-${{ matrix.device }}-${TAG_NAME}-${BUILD_DATE}.zip"
           zip -r9 "../${ZIP_NAME}" . -x ".git/*" ".github/*" "*.md"
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
@@ -171,7 +171,7 @@ jobs:
 
             | Feature | Description |
             | :------ | :---------- |
-            | **ReSukiSU** | Kernel-based root solution |
+            | **BakaSU** | Kernel-based root solution |
             | **SUSFS** | Root-hiding filesystem layer |
             | **Re:Kernel** | Kernel-level hardening |
             | **NoMount** | Mount namespace isolation |

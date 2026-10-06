@@ -1,18 +1,18 @@
 name: Hook Audit & Build Validation
 
-# Validates ReSukiSU + SUSFS inline hook integration, then builds both devices.
+# Validates BakaSU + SUSFS inline hook integration, then builds both devices.
 #
 # WHY this workflow exists:
-#   The ReSukiSU maintainer reported:
-#     ReSukiSU/susfs_inline: WARNING: Detected KSU_MANUAL_HOOK guard in <file>
+#   The BakaSU maintainer reported:
+#     BakaSU/susfs_inline: WARNING: Detected KSU_MANUAL_HOOK guard in <file>
 #   That warning comes from drivers/kernelsu/tools/inline_hook_check.mk, which
 #   greps exactly SEVEN kernel files for the literal token CONFIG_KSU_MANUAL_HOOK.
 #   This workflow reproduces those checks faithfully and then builds, so that
 #   "BUILD SUCCESS" genuinely means the hook integration is correct.
 #
 # CRITICAL -- why the audit does NOT use `grep -R drivers/`:
-#   drivers/kernelsu is a SYMLINK to KernelSU/kernel (the ReSukiSU submodule).
-#   A recursive grep that follows it scans upstream ReSukiSU sources, which
+#   drivers/kernelsu is a SYMLINK to KernelSU/kernel (the BakaSU submodule).
+#   A recursive grep that follows it scans upstream BakaSU sources, which
 #   legitimately contain CONFIG_KSU_MANUAL_HOOK as an optional feature
 #   (hook/lsm_hooks.c, runtime/ksud_integration.c, tools/manual_hook_check.mk,
 #   Kbuild, ...). Those hits are upstream code, not manual-hook guards in this
@@ -59,7 +59,7 @@ jobs:
             echo "=== SUBMODULE STATUS ==="
             git submodule status
             echo
-            echo "=== RESUKISU VERSION ==="
+            echo "=== BAKASU VERSION ==="
             echo "commit      : $(git -C KernelSU rev-parse HEAD)"
             echo "describe    : $(git -C KernelSU describe --always --dirty 2>/dev/null || echo n/a)"
             echo "commits     : $(git -C KernelSU rev-list --count HEAD 2>/dev/null || echo n/a)"
@@ -73,7 +73,7 @@ jobs:
             echo "::error::KernelSU/kernel/Kbuild missing -- submodule not checked out"
             exit 1
           fi
-          echo "ReSukiSU kernel/Kbuild present."
+          echo "BakaSU kernel/Kbuild present."
           if [ -f drivers/kernelsu/Kbuild ]; then
             echo "drivers/kernelsu symlink resolves OK."
           else
@@ -421,7 +421,7 @@ jobs:
             echo "Run      : #${{ github.run_number }} (id ${{ github.run_id }})"
             echo
             echo "=== COMPONENT STATUS ==="
-            echo "ReSukiSU         : $([ "$AUDIT" = success ] && echo OK || echo FAIL)"
+            echo "BakaSU           : $([ "$AUDIT" = success ] && echo OK || echo FAIL)"
             echo "SUSFS            : $([ "$AUDIT" = success ] && echo OK || echo FAIL)"
             echo "SUSFS Inline Hook: $([ "$AUDIT" = success ] && echo OK || echo FAIL)"
             echo "Manual Hook      : NOT DETECTED"
