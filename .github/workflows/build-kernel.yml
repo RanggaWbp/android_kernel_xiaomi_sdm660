@@ -445,6 +445,7 @@ jobs:
             | **BBG** | Baseband guard, anti-format |
             | **EAS** | Energy-aware scheduling |
             | **DroidSpaces** | LXC/Docker container support (namespaces, cgroups, IPv4/IPv6 NAT) |
+            | **BORE** | Burst-Oriented Response Enhancer scheduler |
 
             ## Devices
 
