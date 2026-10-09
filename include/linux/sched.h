@@ -3772,19 +3772,3 @@ void cpufreq_remove_update_util_hook(int cpu);
 
 #endif
 
-#ifdef CONFIG_SCHED_BORE
-typedef union {
-	u16 u16;
-	s16 s16;
-	u8 u8[2];
-} x16;
-
-typedef union {
-	u32 u32;
-	s32 s32;
-	u16 u16[2];
-	s16 s16[2];
-	u8 u8[4];
-	s8 s8[4];
-} x32;
-#endif // CONFIG_SCHED_BORE
