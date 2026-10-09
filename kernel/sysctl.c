@@ -188,7 +188,6 @@ extern unsigned int sched_burst_penalty_scale;
 extern unsigned int sched_burst_smoothness_up;
 extern unsigned int sched_burst_smoothness_down;
 extern unsigned int sched_burst_fork_atavistic;
-static int three          = 3;
 static int seven          = 7;
 static int sixty_four     = 64;
 static int maxval_12_bits = 4095;
