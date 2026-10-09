@@ -8,7 +8,11 @@ Berdasarkan hasil pengujian hardware nyata (tabel di bawah, sebelumnya sudah
 dicatat di changelog ini): `oc_balanced`, `oc_performance`, `oc_extreme`
 (mi6x & mia2) semuanya menyentuh GPU dan **konsisten gagal** dengan random
 reboot / GPU hang (`kgsl gpu timeout` -> kernel panic). Hanya `normal` dan
-`oc_cpu_only` (OC CPU big cluster saja, GPU 100% stock) yang terbukti stabil.
+`oc_cpu_only` (OC CPU big cluster saja, GPU 100% stock) yang terbukti stabil.- Menambahkan support scheduler **BORE** (Burst-Oriented Response Enhancer) ke konfigurasi defconfig `wayne` dan `jasmine` serta patch dari firelzrd/bore-scheduler.
+- Menambahkan **BORE** ke fitur kernel di `.github/workflows/build-kernel.yml` dan `.github/workflows/Build Release.yml` untuk mencetak di `kernel.string` output.
+- Memperbaiki error compile: penghapusan typedef duplicate di `include/linux/sched.h` dan variabel duplicate di `kernel/sysctl.c`.
+- Menambahkan `CONFIG_SCHED_BORE=y` ke `arch/arm64/configs/wayne_defconfig` dan `arch/arm64/configs/jasmine-stock_defconfig`.
+- Mengintegrasikan patch BORE scheduler v3.1.8 dari firelzrd ke kernel 4.4.y.
 
 - `configs/{mi6x,mia2}/{oc_balanced,oc_performance,oc_extreme}.conf` — dihapus.
 - `patches/0002-adreno-a5xx-add-opt-in-speedbin-override.patch` — dihapus (tidak dipakai config manapun lagi).
@@ -92,3 +96,9 @@ Root cause **sudah dipastikan**, bukan dugaan lagi. Crash log dari `oc_balanced`
 - **CPU-only OC (`oc_cpu_only.conf`) belum ada datanya** — silakan uji terpisah kalau ingin tahu apakah CPU big cluster (beda domain binning dari GPU) punya headroom yang valid di unit ini.
 - `normal` build tetap yang paling aman dipakai harian.
 - Kalau `oc_cpu_only` JUGA gagal: unit ini kemungkinan di-bin rendah di semua domain, bukan cuma GPU — hentikan eksperimen OC apapun di unit fisik ini.
+
+- Menambahkan support scheduler **BORE** (Burst-Oriented Response Enhancer) ke konfigurasi defconfig  dan  serta patch dari firelzrd/bore-scheduler.
+- Menambahkan **BORE** ke fitur kernel di  dan  untuk mencetak di  output.
+- Memperbaiki error compile: penghapusan typedef duplicate di  dan variabel duplicate di .
+- Menambahkan  ke  dan .
+- Mengintegrasikan patch BORE scheduler v3.1.8 dari firelzrd ke kernel 4.4.y.
