@@ -95,7 +95,7 @@ jobs:
           cat > anykernel.sh << EOF
           ### AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=Custom Kernel for ${{ matrix.display_name }} (${{ matrix.device }}) | features: BakaSU + SUSFS + Re:Kernel + NoMount + BBG + EAS | by RanggaWbp | ${BUILD_DATE}
+          kernel.string=Custom Kernel for ${{ matrix.display_name }} (${{ matrix.device }}) | features: BakaSU + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE | by RanggaWbp | ${BUILD_DATE}
           do.devicecheck=1
           do.modules=0
           do.systemless=1
