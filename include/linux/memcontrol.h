@@ -128,12 +128,9 @@ struct mem_cgroup_reclaim_iter {
 };
 
 /*
- * per-zone information in memory controller.
+ * per-zone information in memory controller (reclaim iterator + soft limit).
  */
 struct mem_cgroup_per_zone {
-	struct lruvec		lruvec;
-	unsigned long		lru_size[NR_LRU_LISTS];
-
 	struct mem_cgroup_reclaim_iter	iter[DEF_PRIORITY + 1];
 
 	struct rb_node		tree_node;	/* RB tree node */
@@ -144,8 +141,16 @@ struct mem_cgroup_per_zone {
 						/* use container_of	   */
 };
 
+/*
+ * per-node information in memory controller: the node-wide lruvec and
+ * per-(zone,lru) size accounting, following upstream 4.9 layout.
+ */
 struct mem_cgroup_per_node {
+	struct lruvec		lruvec;
+	unsigned long		lru_zone_size[MAX_NR_ZONES][NR_LRU_LISTS];
 	struct mem_cgroup_per_zone zoneinfo[MAX_NR_ZONES];
+	struct mem_cgroup	*memcg;		/* Back pointer, we cannot */
+						/* use container_of	   */
 };
 
 struct mem_cgroup_threshold {
@@ -314,10 +319,16 @@ void mem_cgroup_cancel_charge(struct page *page, struct mem_cgroup *memcg);
 void mem_cgroup_uncharge(struct page *page);
 void mem_cgroup_uncharge_list(struct list_head *page_list);
 
-void mem_cgroup_migrate(struct page *oldpage, struct page *newpage);
+void mem_cgroup_replace_page(struct page *oldpage, struct page *newpage);
 
 struct mem_cgroup_per_zone *
 mem_cgroup_zone_zoneinfo(struct mem_cgroup *memcg, struct zone *zone);
+
+static inline struct mem_cgroup_per_node *
+mem_cgroup_nodeinfo(struct mem_cgroup *memcg, int nid)
+{
+	return memcg->nodeinfo[nid];
+}
 
 /**
  * mem_cgroup_lruvec - get the lru list vector for a node or a memcg zone
@@ -335,32 +346,26 @@ static inline bool mem_cgroup_disabled(void)
 }
 
 static inline struct lruvec *mem_cgroup_lruvec(struct pglist_data *pgdat,
-				struct zone *zone, struct mem_cgroup *memcg)
+				struct mem_cgroup *memcg)
 {
-	struct mem_cgroup_per_zone *mz;
+	struct mem_cgroup_per_node *mz;
 	struct lruvec *lruvec;
 
-	/*
-	 * This tree keeps the LRU lists in the node lruvec (struct
-	 * pglist_data) while memcg size accounting stays per zone in
-	 * mem_cgroup_per_zone. Routing by zone: same list pointer for
-	 * all zones of the node, sizes tracked per (lru, zid).
-	 */
 	if (mem_cgroup_disabled()) {
 		lruvec = node_lruvec(pgdat);
 		goto out;
 	}
 
-	mz = mem_cgroup_zone_zoneinfo(memcg, zone);
-	lruvec = node_lruvec(pgdat);
+	mz = mem_cgroup_nodeinfo(memcg, pgdat->node_id);
+	lruvec = &mz->lruvec;
 out:
 	/*
 	 * Since a node can be onlined after the mem_cgroup was created,
 	 * we have to be prepared to initialize lruvec->pgdat here;
 	 * and if offlined then reonlined, we need to reinitialize it.
 	 */
-	if (unlikely(lruvec->pgdat != zone->zone_pgdat))
-		lruvec->pgdat = zone->zone_pgdat;
+	if (unlikely(lruvec->pgdat != pgdat))
+		lruvec->pgdat = pgdat;
 	return lruvec;
 }
 
@@ -417,13 +422,13 @@ void mem_cgroup_update_lru_size(struct lruvec *lruvec, enum lru_list lru,
 
 static inline bool mem_cgroup_lruvec_online(struct lruvec *lruvec)
 {
-	struct mem_cgroup_per_zone *mz;
+	struct mem_cgroup_per_node *mz;
 	struct mem_cgroup *memcg;
 
 	if (mem_cgroup_disabled())
 		return true;
 
-	mz = container_of(lruvec, struct mem_cgroup_per_zone, lruvec);
+	mz = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
 	memcg = mz->memcg;
 
 	return !!(memcg->css.flags & CSS_ONLINE);
@@ -432,10 +437,14 @@ static inline bool mem_cgroup_lruvec_online(struct lruvec *lruvec)
 static inline
 unsigned long mem_cgroup_get_lru_size(struct lruvec *lruvec, enum lru_list lru)
 {
-	struct mem_cgroup_per_zone *mz;
+	struct mem_cgroup_per_node *mz;
+	unsigned long nr_pages = 0;
+	int zid;
 
-	mz = container_of(lruvec, struct mem_cgroup_per_zone, lruvec);
-	return mz->lru_size[lru];
+	mz = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
+	for (zid = 0; zid < MAX_NR_ZONES; zid++)
+		nr_pages += mz->lru_zone_size[zid][lru];
+	return nr_pages;
 }
 
 static inline bool mem_cgroup_inactive_anon_is_low(struct lruvec *lruvec)

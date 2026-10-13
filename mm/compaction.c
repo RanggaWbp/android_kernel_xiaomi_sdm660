@@ -905,35 +905,6 @@ isolate_success:
 		}
 
 		continue;
-isolate_fail:
-		if (!skip_on_failure)
-			continue;
-
-		/*
-		 * We have isolated some pages, but then failed. Release them
-		 * instead of migrating, as we cannot form the cc->order buddy
-		 * page anyway.
-		 */
-		if (nr_isolated) {
-			if (locked) {
-				spin_unlock_irqrestore(zone_lru_lock(zone), flags);
-				locked = false;
-			}
-			acct_isolated(zone, cc);
-			putback_movable_pages(&cc->migratepages);
-			cc->nr_migratepages = 0;
-			cc->last_migrated_pfn = 0;
-			nr_isolated = 0;
-		}
-
-		if (low_pfn < next_skip_pfn) {
-			low_pfn = next_skip_pfn - 1;
-			/*
-			 * The check near the loop beginning would have updated
-			 * next_skip_pfn too, but this is a bit simpler.
-			 */
-			next_skip_pfn += 1UL << cc->order;
-		}
 	}
 
 	/*

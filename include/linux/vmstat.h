@@ -145,6 +145,26 @@ static inline unsigned long global_page_state(enum zone_stat_item item)
 	return x;
 }
 
+static inline unsigned long global_page_state_snapshot(enum zone_stat_item item)
+{
+	long x = atomic_long_read(&vm_stat[item]);
+
+#ifdef CONFIG_SMP
+	struct zone *zone;
+	int cpu;
+
+	for_each_online_cpu(cpu) {
+		for_each_populated_zone(zone)
+			x += per_cpu_ptr(zone->pageset,
+				cpu)->vm_stat_diff[item];
+	}
+
+	if (x < 0)
+		x = 0;
+#endif
+	return x;
+}
+
 static inline unsigned long zone_page_state(struct zone *zone,
 					enum zone_stat_item item)
 {
