@@ -41,6 +41,9 @@ jobs:
         working-directory: KernelSU
         run: git fetch --unshallow || true
 
+      - name: Apply NoMount 4.4 compat patch
+        run: bash scripts/apply_nomount_compat.sh NoMount
+
       - name: Free up disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
@@ -101,14 +104,15 @@ jobs:
           # .config alone is not proof: a symbol under a disabled parent
           # gate is dropped by olddefconfig and the build still goes green.
           fail=0
-          for sym in CONFIG_NTSYNC CONFIG_IOSCHED_ADIOS CONFIG_LRU_GEN \
-                     CONFIG_TCP_CONG_BBR3 CONFIG_DEFAULT_BBR3 ; do
+          for sym in CONFIG_NTSYNC CONFIG_NOMOUNT CONFIG_IOSCHED_ADIOS \
+                     CONFIG_LRU_GEN CONFIG_TCP_CONG_BBR3 CONFIG_DEFAULT_BBR3 ; do
             if ! grep -q "^${sym}=y$" out/.config; then
               echo "::error::${sym}=y missing from out/.config"
               fail=1
             fi
           done
           for obj in drivers/misc/ntsync.o block/adios-iosched.o \
+                     fs/nomount/nomount.o \
                      net/ipv4/tcp_bbr3.o net/ipv4/tcp_plb.o ; do
             [ -f "out/$obj" ] || { echo "::error::out/$obj not built"; fail=1; }
           done

@@ -140,6 +140,12 @@ jobs:
         working-directory: kernel/KernelSU
         run: git fetch --unshallow || true
 
+      # NoMount tracks maxsteeel/nomount upstream and stays pristine. Upstream
+      # targets modern kernels; this tree is 4.4, so apply the compat shim here.
+      - name: Apply NoMount 4.4 compat patch
+        working-directory: kernel
+        run: bash scripts/apply_nomount_compat.sh NoMount
+
       - name: Free up disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
@@ -298,6 +304,7 @@ jobs:
           }
           fail=0
           check_symbol CONFIG_NTSYNC y        || fail=1
+          check_symbol CONFIG_NOMOUNT y       || fail=1
           check_symbol CONFIG_IOSCHED_ADIOS y || fail=1
           check_symbol CONFIG_LRU_GEN y       || fail=1
           check_symbol CONFIG_TCP_CONG_BBR3 y || fail=1
@@ -306,6 +313,7 @@ jobs:
           # Object files: proves the code was really compiled in, not just
           # selected in Kconfig.
           for obj in drivers/misc/ntsync.o block/adios-iosched.o \
+                     fs/nomount/nomount.o \
                      mm/vmscan.o net/ipv4/tcp_bbr3.o net/ipv4/tcp_plb.o ; do
             if [[ ! -f "out/$obj" ]]; then
               echo "::error::out/$obj tidak ada -- fitur backport tidak ter-compile"
