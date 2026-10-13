@@ -105,6 +105,9 @@ static inline void vm_events_fold_cpu(int cpu)
 		__count_vm_events(item##_NORMAL - ZONE_NORMAL + \
 		zone_idx(zone), delta)
 
+#define __count_zid_vm_events(item, zid, delta) \
+	__count_vm_events(item##_NORMAL - ZONE_NORMAL + zid, delta)
+
 /*
  * Zone and node-based page accounting with per cpu differentials.
  */

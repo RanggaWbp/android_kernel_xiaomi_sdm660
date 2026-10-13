@@ -185,6 +185,8 @@ struct mem_cgroup_id {
 };
 
 /* defined in mm/memcontrol.c; caller holds rcu_read_lock() */
+#define MEM_CGROUP_ID_SHIFT	16
+
 struct mem_cgroup *mem_cgroup_from_id(unsigned short id);
 unsigned long mem_cgroup_node_nr_lru_pages(struct mem_cgroup *memcg,
 					   int nid, unsigned int lru_mask);
@@ -290,6 +292,14 @@ struct mem_cgroup {
 	struct list_head event_list;
 	spinlock_t event_list_lock;
 
+#ifdef CONFIG_LRU_GEN
+	/*
+	 * Must come before nodeinfo[0]. nodeinfo is a zero-length array that
+	 * contributes nothing to sizeof(), so anything placed after it shares
+	 * its address, and nodeinfo[0] would then alias mm_list.fifo.
+	 */
+	struct lru_gen_mm_list mm_list;
+#endif
 	struct mem_cgroup_per_node *nodeinfo[0];
 	/* WARNING: nodeinfo must be the last member here */
 };
@@ -411,6 +421,23 @@ static inline bool mm_match_cgroup(struct mm_struct *mm,
 
 struct cgroup_subsys_state *mem_cgroup_css_from_page(struct page *page);
 ino_t page_cgroup_ino(struct page *page);
+
+static inline bool mem_cgroup_online(struct mem_cgroup *memcg)
+{
+	if (mem_cgroup_disabled())
+		return true;
+	return !!(memcg->css.flags & CSS_ONLINE);
+}
+
+static inline unsigned short mem_cgroup_id(struct mem_cgroup *memcg)
+{
+	if (mem_cgroup_disabled())
+		return 0;
+
+	return memcg->id.id;
+}
+
+long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg);
 
 /*
  * For memory reclaim.
@@ -561,6 +588,10 @@ void mem_cgroup_split_huge_fixup(struct page *head);
 #endif
 
 #else /* CONFIG_MEMCG */
+
+#define MEM_CGROUP_ID_SHIFT	0
+#define MEM_CGROUP_ID_MAX	0
+
 struct mem_cgroup;
 
 static inline void mem_cgroup_events(struct mem_cgroup *memcg,
@@ -646,6 +677,21 @@ static inline void mem_cgroup_iter_break(struct mem_cgroup *root,
 static inline bool mem_cgroup_disabled(void)
 {
 	return true;
+}
+
+static inline bool mem_cgroup_online(struct mem_cgroup *memcg)
+{
+	return true;
+}
+
+static inline unsigned short mem_cgroup_id(struct mem_cgroup *memcg)
+{
+	return 0;
+}
+
+static inline long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg)
+{
+	return get_nr_swap_pages();
 }
 
 static inline bool

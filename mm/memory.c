@@ -62,6 +62,7 @@
 #include <linux/dma-debug.h>
 #include <linux/debugfs.h>
 #include <linux/userfaultfd_k.h>
+#include <linux/mm_inline.h>
 
 #include <asm/io.h>
 #include <asm/pgalloc.h>
@@ -3491,6 +3492,7 @@ int handle_mm_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 		    unsigned long address, unsigned int flags)
 {
 	int ret;
+	bool nonseq_fault = !(vma->vm_flags & VM_SEQ_READ);
 
 	__set_current_state(TASK_RUNNING);
 
@@ -3507,7 +3509,16 @@ int handle_mm_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 	if (flags & FAULT_FLAG_USER)
 		mem_cgroup_oom_enable();
 
-	ret = __handle_mm_fault(mm, vma, address, flags);
+	if (nonseq_fault)
+		task_enter_nonseq_fault();
+
+	if (unlikely(is_vm_hugetlb_page(vma)))
+		ret = hugetlb_fault(vma->vm_mm, vma, address, flags);
+	else
+		ret = __handle_mm_fault(mm, vma, address, flags);
+
+	if (nonseq_fault)
+		task_exit_nonseq_fault();
 
 	if (flags & FAULT_FLAG_USER) {
 		mem_cgroup_oom_disable();

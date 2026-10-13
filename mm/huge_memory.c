@@ -1793,7 +1793,9 @@ static void __split_huge_page_refcount(struct page *page,
 				      (1L << PG_mlocked) |
 				      (1L << PG_uptodate) |
 				      (1L << PG_active) |
-				      (1L << PG_unevictable)));
+				      (1L << PG_workingset) |
+				      (1L << PG_unevictable) |
+				      LRU_GEN_MASK | LRU_REFS_MASK));
 		page_tail->flags |= (1L << PG_dirty);
 
 		clear_compound_head(page_tail);

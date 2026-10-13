@@ -108,6 +108,9 @@ union swap_header {
  */
 struct reclaim_state {
 	unsigned long reclaimed_slab;
+#ifdef CONFIG_LRU_GEN
+	struct mm_walk_args *mm_walk_args;
+#endif
 };
 
 #ifdef __KERNEL__
@@ -155,6 +158,12 @@ enum {
 	SWP_FAST	= (1 << 11),	/* blkdev access is fast and cheap */
 	SWP_SCANNING	= (1 << 12),	/* refcount in scan_swap_map */
 };
+
+/*
+ * Ratio between zone->managed_pages and the "gap" above the per-zone
+ * "high_wmark" (kswapd zone balancing, see mm/vmscan.c, lowmemorykiller).
+ */
+#define KSWAPD_ZONE_BALANCE_GAP_RATIO 100
 
 #define SWAP_CLUSTER_MAX 32UL
 #define COMPACT_CLUSTER_MAX SWAP_CLUSTER_MAX
@@ -246,7 +255,7 @@ struct swap_info_struct {
 
 /* linux/mm/workingset.c */
 void *workingset_eviction(struct address_space *mapping, struct page *page);
-bool workingset_refault(void *shadow);
+void workingset_refault(struct page *page, void *shadow);
 void workingset_activation(struct page *page);
 extern struct list_lru workingset_shadow_nodes;
 
