@@ -53,16 +53,16 @@ static DEFINE_PER_CPU(struct pagevec, lru_deactivate_file_pvecs);
 static void __page_cache_release(struct page *page)
 {
 	if (PageLRU(page)) {
-		struct zone *zone = page_zone(page);
+		struct pglist_data *pgdat = page_pgdat(page);
 		struct lruvec *lruvec;
 		unsigned long flags;
 
-		spin_lock_irqsave(zone_lru_lock(zone), flags);
-		lruvec = mem_cgroup_page_lruvec(page, zone);
+		spin_lock_irqsave(&pgdat->lru_lock, flags);
+		lruvec = mem_cgroup_page_lruvec(page, pgdat);
 		VM_BUG_ON_PAGE(!PageLRU(page), page);
 		__ClearPageLRU(page);
 		del_page_from_lru_list(page, lruvec, page_off_lru(page));
-		spin_unlock_irqrestore(zone_lru_lock(zone), flags);
+		spin_unlock_irqrestore(&pgdat->lru_lock, flags);
 	}
 	mem_cgroup_uncharge(page);
 }
@@ -420,26 +420,26 @@ static void pagevec_lru_move_fn(struct pagevec *pvec,
 	void *arg)
 {
 	int i;
-	struct zone *zone = NULL;
+	struct pglist_data *locked_pgdat = NULL;
 	struct lruvec *lruvec;
 	unsigned long flags = 0;
 
 	for (i = 0; i < pagevec_count(pvec); i++) {
 		struct page *page = pvec->pages[i];
-		struct zone *pagezone = page_zone(page);
+		struct pglist_data *pgdat = page_pgdat(page);
 
-		if (pagezone != zone) {
-			if (zone)
-				spin_unlock_irqrestore(zone_lru_lock(zone), flags);
-			zone = pagezone;
-			spin_lock_irqsave(zone_lru_lock(zone), flags);
+		if (pgdat != locked_pgdat) {
+			if (locked_pgdat)
+				spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
+			locked_pgdat = pgdat;
+			spin_lock_irqsave(&locked_pgdat->lru_lock, flags);
 		}
 
-		lruvec = mem_cgroup_page_lruvec(page, zone->zone_pgdat);
+		lruvec = mem_cgroup_page_lruvec(page, locked_pgdat);
 		(*move_fn)(page, lruvec, arg);
 	}
-	if (zone)
-		spin_unlock_irqrestore(zone_lru_lock(zone), flags);
+	if (locked_pgdat)
+		spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
 	release_pages(pvec->pages, pvec->nr, pvec->cold);
 	pagevec_reinit(pvec);
 }
@@ -557,12 +557,12 @@ static bool need_activate_page_drain(int cpu)
 
 void activate_page(struct page *page)
 {
-	struct zone *zone = page_zone(page);
+	struct pglist_data *pgdat = page_pgdat(page);
 
 	page = compound_head(page);
-	spin_lock_irq(zone_lru_lock(zone));
-	__activate_page(page, mem_cgroup_page_lruvec(page, zone), NULL);
-	spin_unlock_irq(zone_lru_lock(zone));
+	spin_lock_irq(&pgdat->lru_lock);
+	__activate_page(page, mem_cgroup_page_lruvec(page, pgdat), NULL);
+	spin_unlock_irq(&pgdat->lru_lock);
 }
 #endif
 
@@ -690,13 +690,13 @@ void add_page_to_unevictable_list(struct page *page)
 	struct pglist_data *pgdat = page_pgdat(page);
 	struct lruvec *lruvec;
 
-	spin_lock_irq(zone_lru_lock(zone));
-	lruvec = mem_cgroup_page_lruvec(page, zone);
+	spin_lock_irq(&pgdat->lru_lock);
+	lruvec = mem_cgroup_page_lruvec(page, pgdat);
 	ClearPageActive(page);
 	SetPageUnevictable(page);
 	SetPageLRU(page);
 	add_page_to_lru_list(page, lruvec, LRU_UNEVICTABLE);
-	spin_unlock_irq(zone_lru_lock(zone));
+	spin_unlock_irq(&pgdat->lru_lock);
 }
 
 /**
@@ -920,9 +920,9 @@ void release_pages(struct page **pages, int nr, bool cold)
 		struct page *page = pages[i];
 
 		if (unlikely(PageCompound(page))) {
-			if (zone) {
-				spin_unlock_irqrestore(&zone->lru_lock, flags);
-				zone = NULL;
+			if (locked_pgdat) {
+				spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
+				locked_pgdat = NULL;
 			}
 			put_compound_page(page);
 			continue;
@@ -933,18 +933,18 @@ void release_pages(struct page **pages, int nr, bool cold)
 		 * excessive with a continuous string of pages from the
 		 * same pgdat. The lock is held only if pgdat != NULL.
 		 */
-		if (zone && ++lock_batch == SWAP_CLUSTER_MAX) {
-			spin_unlock_irqrestore(zone_lru_lock(zone), flags);
-			zone = NULL;
+		if (locked_pgdat && ++lock_batch == SWAP_CLUSTER_MAX) {
+			spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
+			locked_pgdat = NULL;
 		}
 
 		if (!put_page_testzero(page))
 			continue;
 
 		if (PageCompound(page)) {
-			if (zone) {
-				spin_unlock_irqrestore(zone_lru_lock(zone), flags);
-				zone = NULL;
+			if (locked_pgdat) {
+				spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
+				locked_pgdat = NULL;
 			}
 			__put_compound_page(page);
 			continue;
@@ -953,13 +953,13 @@ void release_pages(struct page **pages, int nr, bool cold)
 		if (PageLRU(page)) {
 			struct pglist_data *pgdat = page_pgdat(page);
 
-			if (pagezone != zone) {
-				if (zone)
-					spin_unlock_irqrestore(zone_lru_lock(zone),
-									flags);
+			if (pgdat != locked_pgdat) {
+				if (locked_pgdat)
+					spin_unlock_irqrestore(&locked_pgdat->lru_lock,
+											flags);
 				lock_batch = 0;
-				zone = pagezone;
-				spin_lock_irqsave(zone_lru_lock(zone), flags);
+				locked_pgdat = pgdat;
+				spin_lock_irqsave(&locked_pgdat->lru_lock, flags);
 			}
 
 			lruvec = mem_cgroup_page_lruvec(page, locked_pgdat);
@@ -973,8 +973,8 @@ void release_pages(struct page **pages, int nr, bool cold)
 
 		list_add(&page->lru, &pages_to_free);
 	}
-	if (zone)
-		spin_unlock_irqrestore(zone_lru_lock(zone), flags);
+	if (locked_pgdat)
+		spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
 
 	mem_cgroup_uncharge_list(&pages_to_free);
 	free_hot_cold_page_list(&pages_to_free, cold);
@@ -1010,7 +1010,7 @@ void lru_add_page_tail(struct page *page, struct page *page_tail,
 	VM_BUG_ON_PAGE(PageCompound(page_tail), page);
 	VM_BUG_ON_PAGE(PageLRU(page_tail), page);
 	VM_BUG_ON(NR_CPUS != 1 &&
-		  !spin_is_locked(zone_lru_lock(lruvec_zone(lruvec))));
+		  !spin_is_locked(&lruvec_pgdat(lruvec)->lru_lock)));
 
 	if (!list)
 		SetPageLRU(page_tail);
