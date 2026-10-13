@@ -128,12 +128,9 @@ struct mem_cgroup_reclaim_iter {
 };
 
 /*
- * per-zone information in memory controller.
+ * per-zone information in memory controller (reclaim iterator + soft limit).
  */
 struct mem_cgroup_per_zone {
-	struct lruvec		lruvec;
-	unsigned long		lru_size[NR_LRU_LISTS];
-
 	struct mem_cgroup_reclaim_iter	iter[DEF_PRIORITY + 1];
 
 	struct rb_node		tree_node;	/* RB tree node */
@@ -144,8 +141,16 @@ struct mem_cgroup_per_zone {
 						/* use container_of	   */
 };
 
+/*
+ * per-node information in memory controller: the node-wide lruvec and
+ * per-(zone,lru) size accounting, following upstream 4.9 layout.
+ */
 struct mem_cgroup_per_node {
+	struct lruvec		lruvec;
+	unsigned long		lru_zone_size[MAX_NR_ZONES][NR_LRU_LISTS];
 	struct mem_cgroup_per_zone zoneinfo[MAX_NR_ZONES];
+	struct mem_cgroup	*memcg;		/* Back pointer, we cannot */
+						/* use container_of	   */
 };
 
 struct mem_cgroup_threshold {
@@ -178,6 +183,13 @@ struct mem_cgroup_id {
 	int id;
 	atomic_t ref;
 };
+
+/* defined in mm/memcontrol.c; caller holds rcu_read_lock() */
+#define MEM_CGROUP_ID_SHIFT	16
+
+struct mem_cgroup *mem_cgroup_from_id(unsigned short id);
+unsigned long mem_cgroup_node_nr_lru_pages(struct mem_cgroup *memcg,
+					   int nid, unsigned int lru_mask);
 
 /*
  * The memory controller data structure. The memory controller controls both
@@ -280,6 +292,14 @@ struct mem_cgroup {
 	struct list_head event_list;
 	spinlock_t event_list_lock;
 
+#ifdef CONFIG_LRU_GEN
+	/*
+	 * Must come before nodeinfo[0]. nodeinfo is a zero-length array that
+	 * contributes nothing to sizeof(), so anything placed after it shares
+	 * its address, and nodeinfo[0] would then alias mm_list.fifo.
+	 */
+	struct lru_gen_mm_list mm_list;
+#endif
 	struct mem_cgroup_per_node *nodeinfo[0];
 	/* WARNING: nodeinfo must be the last member here */
 };
@@ -311,8 +331,55 @@ void mem_cgroup_uncharge_list(struct list_head *page_list);
 
 void mem_cgroup_replace_page(struct page *oldpage, struct page *newpage);
 
-struct lruvec *mem_cgroup_zone_lruvec(struct zone *, struct mem_cgroup *);
-struct lruvec *mem_cgroup_page_lruvec(struct page *, struct zone *);
+struct mem_cgroup_per_zone *
+mem_cgroup_zone_zoneinfo(struct mem_cgroup *memcg, struct zone *zone);
+
+static inline struct mem_cgroup_per_node *
+mem_cgroup_nodeinfo(struct mem_cgroup *memcg, int nid)
+{
+	return memcg->nodeinfo[nid];
+}
+
+/**
+ * mem_cgroup_lruvec - get the lru list vector for a node or a memcg zone
+ * @node: node of the wanted lruvec
+ * @zone: zone of the wanted lruvec
+ * @memcg: memcg of the wanted lruvec
+ *
+ * Returns the lru list vector holding pages for a given @node or a given
+ * @memcg and @zone. This can be the node lruvec, if the memory controller
+ * is disabled.
+ */
+static inline bool mem_cgroup_disabled(void)
+{
+	return !cgroup_subsys_enabled(memory_cgrp_subsys);
+}
+
+static inline struct lruvec *mem_cgroup_lruvec(struct pglist_data *pgdat,
+				struct mem_cgroup *memcg)
+{
+	struct mem_cgroup_per_node *mz;
+	struct lruvec *lruvec;
+
+	if (mem_cgroup_disabled()) {
+		lruvec = node_lruvec(pgdat);
+		goto out;
+	}
+
+	mz = mem_cgroup_nodeinfo(memcg, pgdat->node_id);
+	lruvec = &mz->lruvec;
+out:
+	/*
+	 * Since a node can be onlined after the mem_cgroup was created,
+	 * we have to be prepared to initialize lruvec->pgdat here;
+	 * and if offlined then reonlined, we need to reinitialize it.
+	 */
+	if (unlikely(lruvec->pgdat != pgdat))
+		lruvec->pgdat = pgdat;
+	return lruvec;
+}
+
+struct lruvec *mem_cgroup_page_lruvec(struct page *, struct pglist_data *);
 
 bool task_in_mem_cgroup(struct task_struct *task, struct mem_cgroup *memcg);
 struct mem_cgroup *mem_cgroup_from_task(struct task_struct *p);
@@ -355,10 +422,22 @@ static inline bool mm_match_cgroup(struct mm_struct *mm,
 struct cgroup_subsys_state *mem_cgroup_css_from_page(struct page *page);
 ino_t page_cgroup_ino(struct page *page);
 
-static inline bool mem_cgroup_disabled(void)
+static inline bool mem_cgroup_online(struct mem_cgroup *memcg)
 {
-	return !cgroup_subsys_enabled(memory_cgrp_subsys);
+	if (mem_cgroup_disabled())
+		return true;
+	return !!(memcg->css.flags & CSS_ONLINE);
 }
+
+static inline unsigned short mem_cgroup_id(struct mem_cgroup *memcg)
+{
+	if (mem_cgroup_disabled())
+		return 0;
+
+	return memcg->id.id;
+}
+
+long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg);
 
 /*
  * For memory reclaim.
@@ -366,17 +445,17 @@ static inline bool mem_cgroup_disabled(void)
 int mem_cgroup_select_victim_node(struct mem_cgroup *memcg);
 
 void mem_cgroup_update_lru_size(struct lruvec *lruvec, enum lru_list lru,
-		int nr_pages);
+		enum zone_type zid, int nr_pages);
 
 static inline bool mem_cgroup_lruvec_online(struct lruvec *lruvec)
 {
-	struct mem_cgroup_per_zone *mz;
+	struct mem_cgroup_per_node *mz;
 	struct mem_cgroup *memcg;
 
 	if (mem_cgroup_disabled())
 		return true;
 
-	mz = container_of(lruvec, struct mem_cgroup_per_zone, lruvec);
+	mz = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
 	memcg = mz->memcg;
 
 	return !!(memcg->css.flags & CSS_ONLINE);
@@ -385,10 +464,14 @@ static inline bool mem_cgroup_lruvec_online(struct lruvec *lruvec)
 static inline
 unsigned long mem_cgroup_get_lru_size(struct lruvec *lruvec, enum lru_list lru)
 {
-	struct mem_cgroup_per_zone *mz;
+	struct mem_cgroup_per_node *mz;
+	unsigned long nr_pages = 0;
+	int zid;
 
-	mz = container_of(lruvec, struct mem_cgroup_per_zone, lruvec);
-	return mz->lru_size[lru];
+	mz = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
+	for (zid = 0; zid < MAX_NR_ZONES; zid++)
+		nr_pages += mz->lru_zone_size[zid][lru];
+	return nr_pages;
 }
 
 static inline bool mem_cgroup_inactive_anon_is_low(struct lruvec *lruvec)
@@ -505,6 +588,10 @@ void mem_cgroup_split_huge_fixup(struct page *head);
 #endif
 
 #else /* CONFIG_MEMCG */
+
+#define MEM_CGROUP_ID_SHIFT	0
+#define MEM_CGROUP_ID_MAX	0
+
 struct mem_cgroup;
 
 static inline void mem_cgroup_events(struct mem_cgroup *memcg,
@@ -550,16 +637,16 @@ static inline void mem_cgroup_replace_page(struct page *old, struct page *new)
 {
 }
 
-static inline struct lruvec *mem_cgroup_zone_lruvec(struct zone *zone,
-						    struct mem_cgroup *memcg)
+static inline struct lruvec *mem_cgroup_lruvec(struct pglist_data *pgdat,
+				struct mem_cgroup *memcg)
 {
-	return &zone->lruvec;
+	return node_lruvec(pgdat);
 }
 
 static inline struct lruvec *mem_cgroup_page_lruvec(struct page *page,
-						    struct zone *zone)
+						    struct pglist_data *pgdat)
 {
-	return &zone->lruvec;
+	return &pgdat->lruvec;
 }
 
 static inline bool mm_match_cgroup(struct mm_struct *mm,
@@ -592,6 +679,21 @@ static inline bool mem_cgroup_disabled(void)
 	return true;
 }
 
+static inline bool mem_cgroup_online(struct mem_cgroup *memcg)
+{
+	return true;
+}
+
+static inline unsigned short mem_cgroup_id(struct mem_cgroup *memcg)
+{
+	return 0;
+}
+
+static inline long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg)
+{
+	return get_nr_swap_pages();
+}
+
 static inline bool
 mem_cgroup_inactive_anon_is_low(struct lruvec *lruvec)
 {
@@ -611,7 +713,7 @@ mem_cgroup_get_lru_size(struct lruvec *lruvec, enum lru_list lru)
 
 static inline void
 mem_cgroup_update_lru_size(struct lruvec *lruvec, enum lru_list lru,
-			      int increment)
+			      enum zone_type zid, int nr_pages)
 {
 }
 

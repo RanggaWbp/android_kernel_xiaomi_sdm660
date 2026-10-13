@@ -1793,7 +1793,9 @@ static void __split_huge_page_refcount(struct page *page,
 				      (1L << PG_mlocked) |
 				      (1L << PG_uptodate) |
 				      (1L << PG_active) |
-				      (1L << PG_unevictable)));
+				      (1L << PG_workingset) |
+				      (1L << PG_unevictable) |
+				      LRU_GEN_MASK | LRU_REFS_MASK));
 		page_tail->flags |= (1L << PG_dirty);
 
 		clear_compound_head(page_tail);
@@ -2387,12 +2389,7 @@ static bool khugepaged_scan_abort(int nid)
 {
 	int i;
 
-	/*
-	 * If zone_reclaim_mode is disabled, then no extra effort is made to
-	 * allocate memory locally.
-	 */
-	if (!zone_reclaim_mode)
-		return false;
+	lruvec = mem_cgroup_page_lruvec(head, zone->zone_pgdat);
 
 	/* If there is a count for this node already, it must be acceptable */
 	if (khugepaged_node_load[nid])
@@ -2447,8 +2444,7 @@ static bool khugepaged_prealloc_page(struct page **hpage, bool *wait)
 		*hpage = NULL;
 	}
 
-	return true;
-}
+	spin_unlock_irqrestore(zone_lru_lock(page_zone(head)), flags);
 
 static struct page *
 khugepaged_alloc_page(struct page **hpage, gfp_t gfp, struct mm_struct *mm,
@@ -2598,8 +2594,8 @@ static void collapse_huge_page(struct mm_struct *mm,
 
 	anon_vma_lock_write(vma->anon_vma);
 
-	pte = pte_offset_map(pmd, address);
-	pte_ptl = pte_lockptr(mm, pmd);
+	/* prevent PageLRU to go away from under us, and freeze lru stats */
+	spin_lock_irqsave(zone_lru_lock(page_zone(head)), flags);
 
 	mmun_start = address;
 	mmun_end   = address + HPAGE_PMD_SIZE;
@@ -2634,11 +2630,36 @@ static void collapse_huge_page(struct mm_struct *mm,
 		goto out;
 	}
 
-	/*
-	 * All pages are isolated and locked so anon_vma rmap
-	 * can't run anymore.
-	 */
-	anon_vma_unlock_write(vma->anon_vma);
+	/* Prevent deferred_split_scan() touching ->_refcount */
+	spin_lock(&pgdata->split_queue_lock);
+	count = page_count(head);
+	mapcount = total_mapcount(head);
+	if (!mapcount && page_ref_freeze(head, 1 + extra_pins)) {
+		if (!list_empty(page_deferred_list(head))) {
+			pgdata->split_queue_len--;
+			list_del(page_deferred_list(head));
+		}
+		if (mapping)
+			__dec_zone_page_state(page, NR_SHMEM_THPS);
+		spin_unlock(&pgdata->split_queue_lock);
+		__split_huge_page(page, list, flags);
+		ret = 0;
+	} else {
+		if (IS_ENABLED(CONFIG_DEBUG_VM) && mapcount) {
+			pr_alert("total_mapcount: %u, page_count(): %u\n",
+					mapcount, count);
+			if (PageTail(page))
+				dump_page(head, NULL);
+			dump_page(page, "total_mapcount(head) > 0");
+			BUG();
+		}
+		spin_unlock(&pgdata->split_queue_lock);
+fail:		if (mapping)
+			spin_unlock(&mapping->tree_lock);
+		spin_unlock_irqrestore(zone_lru_lock(page_zone(head)), flags);
+		unfreeze_page(head);
+		ret = -EBUSY;
+	}
 
 	__collapse_huge_page_copy(pte, new_page, vma, address, pte_ptl);
 	pte_unmap(pte);

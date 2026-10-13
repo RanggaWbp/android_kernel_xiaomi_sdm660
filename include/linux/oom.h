@@ -55,6 +55,22 @@ enum oom_scan_t {
 
 extern struct mutex oom_lock;
 
+/*
+ * 4.4 msm-4.4 has no OOM reaper (no oom_reaper_list/oom_reaper_wait).
+ * Overkill avoidance is handled by TIF_MEMDIE checks in out_of_memory().
+ */
+static inline bool oom_reaping_in_progress(void)
+{
+	return false;
+}
+
+/* 4.4 has no MMF_OOM_VICTIM; never skip scanning on this basis. */
+static inline bool mm_is_oom_victim(struct mm_struct *mm)
+{
+	return false;
+}
+
+
 static inline void set_current_oom_origin(void)
 {
 	current->signal->oom_flags |= OOM_FLAG_ORIGIN;

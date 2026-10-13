@@ -1786,6 +1786,9 @@ struct task_struct {
 	/* disallow userland-initiated cgroup migration */
 	unsigned no_cgroup_migration:1;
 #endif
+#ifdef CONFIG_LRU_GEN
+	unsigned			in_nonseq_fault:1;
+#endif
 
 	unsigned long atomic_flags; /* Flags needing atomic access. */
 
