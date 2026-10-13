@@ -32,6 +32,9 @@
 *.lz4
 *.lzo
 *.patch
+# NoMount 4.4 compat shim must be tracked: CI applies it to the pristine
+# upstream submodule at build time.
+!scripts/nomount/*.patch
 *.gcno
 *.ll
 modules.builtin

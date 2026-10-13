@@ -136,6 +136,9 @@ jobs:
       - name: Unshallow KernelSU submodule
         run: git -C KernelSU fetch --unshallow 2>/dev/null || true
 
+      - name: Apply NoMount 4.4 compat patch
+        run: bash scripts/apply_nomount_compat.sh NoMount
+
       - name: Free up disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
@@ -271,6 +274,9 @@ jobs:
 
       - name: Unshallow KernelSU submodule
         run: git -C KernelSU fetch --unshallow 2>/dev/null || true
+
+      - name: Apply NoMount 4.4 compat patch
+        run: bash scripts/apply_nomount_compat.sh NoMount
 
       - name: Free up disk space
         run: |
