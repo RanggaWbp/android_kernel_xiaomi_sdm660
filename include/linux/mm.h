@@ -931,6 +931,11 @@ static inline void set_page_memcg(struct page *page, struct mem_cgroup *memcg)
 {
 	page->mem_cgroup = memcg;
 }
+
+static inline struct mem_cgroup *page_memcg_rcu(struct page *page)
+{
+	return READ_ONCE(page->mem_cgroup);
+}
 #else
 static inline struct mem_cgroup *page_memcg(struct page *page)
 {

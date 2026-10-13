@@ -180,7 +180,7 @@ static void unpack_shadow(void *shadow,
 
 	*zone = NODE_DATA(nid)->node_zones + zid;
 
-	refault = atomic_long_read(&(*zone)->inactive_age);
+	refault = atomic_long_read(&(*zone)->zone_pgdat->lruvec.inactive_age);
 	mask = ~0UL >> (NODES_SHIFT + ZONES_SHIFT +
 			RADIX_TREE_EXCEPTIONAL_SHIFT);
 	/*
@@ -215,14 +215,8 @@ void *workingset_eviction(struct address_space *mapping, struct page *page)
 	struct zone *zone = page_zone(page);
 	unsigned long eviction;
 
-	/* Page is fully exclusive and pins page->mem_cgroup */
-	VM_BUG_ON_PAGE(PageLRU(page), page);
-	VM_BUG_ON_PAGE(page_count(page), page);
-	VM_BUG_ON_PAGE(!PageLocked(page), page);
-
-	lruvec = mem_cgroup_lruvec(zone->zone_pgdat, zone, memcg);
-	eviction = atomic_long_inc_return(&lruvec->inactive_age);
-	return pack_shadow(memcgid, zone, eviction);
+	eviction = atomic_long_inc_return(&zone->zone_pgdat->lruvec.inactive_age);
+	return pack_shadow(eviction, zone);
 }
 
 /**
@@ -238,54 +232,6 @@ bool workingset_refault(void *shadow)
 {
 	unsigned long refault_distance;
 	struct zone *zone;
-	int memcgid;
-
-	unpack_shadow(shadow, &memcgid, &zone, &eviction);
-
-	rcu_read_lock();
-	/*
-	 * Look up the memcg associated with the stored ID. It might
-	 * have been deleted since the page's eviction.
-	 *
-	 * Note that in rare events the ID could have been recycled
-	 * for a new cgroup that refaults a shared page. This is
-	 * impossible to tell from the available data. However, this
-	 * should be a rare and limited disturbance, and activations
-	 * are always speculative anyway. Ultimately, it's the aging
-	 * algorithm's job to shake out the minimum access frequency
-	 * for the active cache.
-	 *
-	 * XXX: On !CONFIG_MEMCG, this will always return NULL; it
-	 * would be better if the root_mem_cgroup existed in all
-	 * configurations instead.
-	 */
-	memcg = mem_cgroup_from_id(memcgid);
-	if (!mem_cgroup_disabled() && !memcg) {
-		rcu_read_unlock();
-		return false;
-	}
-	lruvec = mem_cgroup_lruvec(zone->zone_pgdat, zone, memcg);
-	refault = atomic_long_read(&lruvec->inactive_age);
-	active_file = lruvec_lru_size(lruvec, LRU_ACTIVE_FILE);
-	rcu_read_unlock();
-
-	/*
-	 * The unsigned subtraction here gives an accurate distance
-	 * across inactive_age overflows in most cases.
-	 *
-	 * There is a special case: usually, shadow entries have a
-	 * short lifetime and are either refaulted or reclaimed along
-	 * with the inode before they get too old.  But it is not
-	 * impossible for the inactive_age to lap a shadow entry in
-	 * the field, which can then can result in a false small
-	 * refault distance, leading to a false activation should this
-	 * old entry actually refault again.  However, earlier kernels
-	 * used to deactivate unconditionally with *every* reclaim
-	 * invocation for the longest time, so the occasional
-	 * inappropriate activation leading to pressure on the active
-	 * list is not a problem.
-	 */
-	refault_distance = (refault - eviction) & EVICTION_MASK;
 
 	unpack_shadow(shadow, &zone, &refault_distance);
 	inc_zone_state(zone, WORKINGSET_REFAULT);
@@ -303,24 +249,7 @@ bool workingset_refault(void *shadow)
  */
 void workingset_activation(struct page *page)
 {
-	struct mem_cgroup *memcg;
-	struct lruvec *lruvec;
-
-	rcu_read_lock();
-	/*
-	 * Filter non-memcg pages here, e.g. unmap can call
-	 * mark_page_accessed() on VDSO pages.
-	 *
-	 * XXX: See workingset_refault() - this should return
-	 * root_mem_cgroup even for !CONFIG_MEMCG.
-	 */
-	memcg = page_memcg_rcu(page);
-	if (!mem_cgroup_disabled() && !memcg)
-		goto out;
-	lruvec = mem_cgroup_lruvec(page_pgdat(page), page_zone(page), memcg);
-	atomic_long_inc(&lruvec->inactive_age);
-out:
-	rcu_read_unlock();
+	atomic_long_inc(&page_zone(page)->zone_pgdat->lruvec.inactive_age);
 }
 
 /*
@@ -349,14 +278,7 @@ static unsigned long count_shadow_nodes(struct shrinker *shrinker,
 	shadow_nodes = list_lru_shrink_count(&workingset_shadow_nodes, sc);
 	local_irq_enable();
 
-	if (memcg_kmem_enabled()) {
-		pages = mem_cgroup_node_nr_lru_pages(sc->memcg, sc->nid,
-						     LRU_ALL_FILE);
-	} else {
-		pages = node_page_state_pgdat(NODE_DATA(sc->nid), NR_ACTIVE_FILE) +
-			node_page_state_pgdat(NODE_DATA(sc->nid), NR_INACTIVE_FILE);
-	}
-
+	pages = node_present_pages(sc->nid);
 	/*
 	 * Active cache pages are limited to 50% of memory, and shadow
 	 * entries that represent a refault distance bigger than that

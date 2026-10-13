@@ -179,6 +179,11 @@ struct mem_cgroup_id {
 	atomic_t ref;
 };
 
+/* defined in mm/memcontrol.c; caller holds rcu_read_lock() */
+struct mem_cgroup *mem_cgroup_from_id(unsigned short id);
+unsigned long mem_cgroup_node_nr_lru_pages(struct mem_cgroup *memcg,
+					   int nid, unsigned int lru_mask);
+
 /*
  * The memory controller data structure. The memory controller controls both
  * page cache and RSS per cgroup. We would eventually like to provide

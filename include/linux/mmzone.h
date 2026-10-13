@@ -246,10 +246,14 @@ struct zone_reclaim_stat {
 struct lruvec {
 	struct list_head lists[NR_LRU_LISTS];
 	struct zone_reclaim_stat reclaim_stat;
+	/* Evictions & activations on the inactive file list */
+	atomic_long_t		inactive_age;
 #ifdef CONFIG_MEMCG
 	struct pglist_data *pgdat;
 #endif
 };
+
+unsigned long lruvec_lru_size(struct lruvec *lruvec, enum lru_list lru, int zone_idx);
 
 /* Mask used at gathering information at once (see memcontrol.c) */
 #define LRU_ALL_FILE (BIT(LRU_INACTIVE_FILE) | BIT(LRU_ACTIVE_FILE))

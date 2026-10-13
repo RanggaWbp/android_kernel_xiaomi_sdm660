@@ -862,7 +862,6 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 	unsigned long nr_scanned;
 
 	spin_lock(&zone->lock);
-	isolated_pageblocks = has_isolate_pageblock(zone);
 	nr_scanned = node_page_state_pgdat(zone->zone_pgdat, NR_PAGES_SCANNED);
 	if (nr_scanned)
 		__mod_node_page_state(zone->zone_pgdat, NR_PAGES_SCANNED, -nr_scanned);
@@ -6322,26 +6321,31 @@ void setup_per_zone_wmarks(void)
  *    1TB     101        10GB
  *   10TB     320        32GB
  */
-static void __meminit calculate_zone_inactive_ratio(struct zone *zone)
+static void __meminit calculate_node_inactive_ratio(struct pglist_data *pgdat)
 {
 	unsigned int gb, ratio;
+	unsigned long managed = 0;
+	int z;
 
-	/* Zone size in gigabytes */
-	gb = zone->managed_pages >> (30 - PAGE_SHIFT);
+	for (z = 0; z < MAX_NR_ZONES; z++)
+		managed += pgdat->node_zones[z].managed_pages;
+
+	/* Node size in gigabytes */
+	gb = managed >> (30 - PAGE_SHIFT);
 	if (gb)
 		ratio = int_sqrt(10 * gb);
 	else
 		ratio = 1;
 
-	zone->inactive_ratio = ratio;
+	pgdat->inactive_ratio = ratio;
 }
 
 static void __meminit setup_per_zone_inactive_ratio(void)
 {
-	struct zone *zone;
+	struct pglist_data *pgdat;
 
-	for_each_zone(zone)
-		calculate_zone_inactive_ratio(zone);
+	for_each_online_pgdat(pgdat)
+		calculate_node_inactive_ratio(pgdat);
 }
 
 /*
