@@ -387,7 +387,7 @@ EXPORT_SYMBOL(memcg_kmem_enabled_key);
 
 #endif /* CONFIG_MEMCG_KMEM */
 
-static struct mem_cgroup_per_zone *
+struct mem_cgroup_per_zone *
 mem_cgroup_zone_zoneinfo(struct mem_cgroup *memcg, struct zone *zone)
 {
 	int nid = zone_to_nid(zone);
@@ -1060,20 +1060,20 @@ struct lruvec *mem_cgroup_zone_lruvec(struct zone *zone,
 	struct lruvec *lruvec;
 
 	if (mem_cgroup_disabled()) {
-		lruvec = &zone->lruvec;
+		lruvec = &zone->zone_pgdat->lruvec;
 		goto out;
 	}
 
 	mz = mem_cgroup_zone_zoneinfo(memcg, zone);
-	lruvec = &mz->lruvec;
+	lruvec = &zone->zone_pgdat->lruvec;
 out:
 	/*
 	 * Since a node can be onlined after the mem_cgroup was created,
-	 * we have to be prepared to initialize lruvec->zone here;
+	 * we have to be prepared to initialize lruvec->pgdat here;
 	 * and if offlined then reonlined, we need to reinitialize it.
 	 */
-	if (unlikely(lruvec->zone != zone))
-		lruvec->zone = zone;
+	if (unlikely(lruvec->pgdat != zone->zone_pgdat))
+		lruvec->pgdat = zone->zone_pgdat;
 	return lruvec;
 }
 
