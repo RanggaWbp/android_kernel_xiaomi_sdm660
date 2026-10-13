@@ -1077,6 +1077,18 @@ out:
 	return lruvec;
 }
 
+/* node-LRU variant: the lruvec lives in pgdat, not in the zone */
+struct lruvec *mem_cgroup_node_lruvec(struct pglist_data *pgdat,
+				      struct mem_cgroup *memcg)
+{
+	/*
+	 * Until the memcg per-node lruvec exists, fall back to the
+	 * node lruvec. memcg accounting of LRU sizes is still tracked
+	 * via mz->lru_size through mem_cgroup_update_lru_size().
+	 */
+	return &pgdat->lruvec;
+}
+
 /**
  * mem_cgroup_page_lruvec - return lruvec for isolating/putting an LRU page
  * @page: the page

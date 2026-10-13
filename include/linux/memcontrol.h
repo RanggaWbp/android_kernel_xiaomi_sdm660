@@ -311,14 +311,8 @@ void mem_cgroup_uncharge_list(struct list_head *page_list);
 
 void mem_cgroup_migrate(struct page *oldpage, struct page *newpage);
 
-static inline struct mem_cgroup_per_zone *
-mem_cgroup_zone_zoneinfo(struct mem_cgroup *memcg, struct zone *zone)
-{
-	int nid = zone_to_nid(zone);
-	int zid = zone_idx(zone);
-
-	return &memcg->nodeinfo[nid]->zoneinfo[zid];
-}
+struct mem_cgroup_per_zone *
+mem_cgroup_zone_zoneinfo(struct mem_cgroup *memcg, struct zone *zone);
 
 /**
  * mem_cgroup_lruvec - get the lru list vector for a node or a memcg zone
@@ -341,13 +335,19 @@ static inline struct lruvec *mem_cgroup_lruvec(struct pglist_data *pgdat,
 	struct mem_cgroup_per_zone *mz;
 	struct lruvec *lruvec;
 
+	/*
+	 * This tree keeps the LRU lists in the node lruvec (struct
+	 * pglist_data) while memcg size accounting stays per zone in
+	 * mem_cgroup_per_zone. Routing by zone: same list pointer for
+	 * all zones of the node, sizes tracked per (lru, zid).
+	 */
 	if (mem_cgroup_disabled()) {
 		lruvec = node_lruvec(pgdat);
 		goto out;
 	}
 
 	mz = mem_cgroup_zone_zoneinfo(memcg, zone);
-	lruvec = &mz->lruvec;
+	lruvec = node_lruvec(pgdat);
 out:
 	/*
 	 * Since a node can be onlined after the mem_cgroup was created,
