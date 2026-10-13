@@ -863,7 +863,7 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 
 	spin_lock(&zone->lock);
 	isolated_pageblocks = has_isolate_pageblock(zone);
-	nr_scanned = node_page_state(zone->zone_pgdat, NR_PAGES_SCANNED);
+	nr_scanned = node_page_state_pgdat(zone->zone_pgdat, NR_PAGES_SCANNED);
 	if (nr_scanned)
 		__mod_node_page_state(zone->zone_pgdat, NR_PAGES_SCANNED, -nr_scanned);
 
@@ -922,7 +922,7 @@ static void free_one_page(struct zone *zone,
 {
 	unsigned long nr_scanned;
 	spin_lock(&zone->lock);
-	nr_scanned = node_page_state(zone->zone_pgdat, NR_PAGES_SCANNED);
+	nr_scanned = node_page_state_pgdat(zone->zone_pgdat, NR_PAGES_SCANNED);
 	if (nr_scanned)
 		__mod_node_page_state(zone->zone_pgdat, NR_PAGES_SCANNED, -nr_scanned);
 
@@ -3938,13 +3938,13 @@ void show_free_areas(unsigned int filter)
 			" all_unreclaimable? %s"
 			"\n",
 			pgdat->node_id,
-			K(node_page_state(pgdat, NR_ACTIVE_ANON)),
-			K(node_page_state(pgdat, NR_INACTIVE_ANON)),
-			K(node_page_state(pgdat, NR_ACTIVE_FILE)),
-			K(node_page_state(pgdat, NR_INACTIVE_FILE)),
-			K(node_page_state(pgdat, NR_UNEVICTABLE)),
-			K(node_page_state(pgdat, NR_ISOLATED_ANON)),
-			K(node_page_state(pgdat, NR_ISOLATED_FILE)),
+			K(node_page_state_pgdat(pgdat, NR_ACTIVE_ANON)),
+			K(node_page_state_pgdat(pgdat, NR_INACTIVE_ANON)),
+			K(node_page_state_pgdat(pgdat, NR_ACTIVE_FILE)),
+			K(node_page_state_pgdat(pgdat, NR_INACTIVE_FILE)),
+			K(node_page_state_pgdat(pgdat, NR_UNEVICTABLE)),
+			K(node_page_state_pgdat(pgdat, NR_ISOLATED_ANON)),
+			K(node_page_state_pgdat(pgdat, NR_ISOLATED_FILE)),
 			!pgdat_reclaimable(pgdat) ? "yes" : "no");
 	}
 
@@ -4006,7 +4006,7 @@ void show_free_areas(unsigned int filter)
 			K(this_cpu_read(zone->pageset->pcp.count)),
 			K(zone_page_state(zone, NR_FREE_CMA_PAGES)),
 			K(zone_page_state(zone, NR_WRITEBACK_TEMP)),
-			K(node_page_state(zone->zone_pgdat, NR_PAGES_SCANNED)));
+			K(node_page_state_pgdat(zone->zone_pgdat, NR_PAGES_SCANNED)));
 		printk("lowmem_reserve[]:");
 		for (i = 0; i < MAX_NR_ZONES; i++)
 			printk(" %ld", zone->lowmem_reserve[i]);
@@ -5553,6 +5553,13 @@ void __paginginit free_area_init_node(int nid, unsigned long *zones_size,
 
 	reset_deferred_meminit(pgdat);
 	free_area_init_core(pgdat);
+
+#ifdef CONFIG_SMP
+	/* Allocate per-node vmstat differentials for node LRUs */
+	if (!pgdat->per_cpu_nodestats)
+		pgdat->per_cpu_nodestats =
+			alloc_percpu(struct per_cpu_nodestat);
+#endif
 }
 
 #ifdef CONFIG_HAVE_MEMBLOCK_NODE_MAP

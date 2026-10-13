@@ -251,7 +251,7 @@ static unsigned long get_lru_size(struct lruvec *lruvec, enum lru_list lru)
 	if (!mem_cgroup_disabled())
 		return mem_cgroup_get_lru_size(lruvec, lru);
 
-	return node_page_state(lruvec_pgdat(lruvec), NR_LRU_BASE + lru);
+	return node_page_state_pgdat(lruvec_pgdat(lruvec), NR_LRU_BASE + lru);
 }
 
 /*
@@ -1660,11 +1660,11 @@ static int too_many_isolated(struct pglist_data *pgdat, int file,
 		return 0;
 
 	if (file) {
-		inactive = node_page_state(pgdat, NR_INACTIVE_FILE);
-		isolated = node_page_state(pgdat, NR_ISOLATED_FILE);
+		inactive = node_page_state_pgdat(pgdat, NR_INACTIVE_FILE);
+		isolated = node_page_state_pgdat(pgdat, NR_ISOLATED_FILE);
 	} else {
-		inactive = node_page_state(pgdat, NR_INACTIVE_ANON);
-		isolated = node_page_state(pgdat, NR_ISOLATED_ANON);
+		inactive = node_page_state_pgdat(pgdat, NR_INACTIVE_ANON);
+		isolated = node_page_state_pgdat(pgdat, NR_ISOLATED_ANON);
 	}
 
 	return 0;
@@ -2234,8 +2234,8 @@ static void get_scan_count(struct lruvec *lruvec, int swappiness,
 		unsigned long total_high_wmark = 0;
 
 		pgdatfree = sum_zone_node_page_state(pgdat->node_id, NR_FREE_PAGES);
-		pgdatfile = node_page_state(pgdat, NR_ACTIVE_FILE) +
-			   node_page_state(pgdat, NR_INACTIVE_FILE);
+		pgdatfile = node_page_state_pgdat(pgdat, NR_ACTIVE_FILE) +
+			   node_page_state_pgdat(pgdat, NR_INACTIVE_FILE);
 
 		for (z = 0; z < MAX_NR_ZONES; z++) {
 			struct zone *zone = &pgdat->node_zones[z];
@@ -2551,9 +2551,9 @@ static inline bool should_continue_reclaim(struct pglist_data *pgdat,
 	 * inactive lists are large enough, continue reclaiming
 	 */
 	pages_for_compaction = (2UL << sc->order);
-	inactive_lru_pages = node_page_state(pgdat, NR_INACTIVE_FILE);
+	inactive_lru_pages = node_page_state_pgdat(pgdat, NR_INACTIVE_FILE);
 	if (get_nr_swap_pages() > 0)
-		inactive_lru_pages += node_page_state(pgdat, NR_INACTIVE_ANON);
+		inactive_lru_pages += node_page_state_pgdat(pgdat, NR_INACTIVE_ANON);
 	if (sc->nr_reclaimed < pages_for_compaction &&
 			inactive_lru_pages > pages_for_compaction)
 		return true;
@@ -3783,8 +3783,8 @@ int sysctl_min_slab_ratio = 5;
 static inline unsigned long zone_unmapped_file_pages(struct zone *zone)
 {
 	unsigned long file_mapped = zone_page_state(zone, NR_FILE_MAPPED);
-	unsigned long file_lru = node_page_state(zone->zone_pgdat, NR_INACTIVE_FILE) +
-		node_page_state(zone->zone_pgdat, NR_ACTIVE_FILE);
+	unsigned long file_lru = node_page_state_pgdat(zone->zone_pgdat, NR_INACTIVE_FILE) +
+		node_page_state_pgdat(zone->zone_pgdat, NR_ACTIVE_FILE);
 
 	/*
 	 * It's possible for there to be more file mapped pages than

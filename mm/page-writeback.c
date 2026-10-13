@@ -285,8 +285,8 @@ static unsigned long zone_dirtyable_memory(struct zone *zone)
 	 */
 	nr_pages -= min(nr_pages, zone->totalreserve_pages);
 
-	nr_pages += node_page_state(zone->zone_pgdat, NR_INACTIVE_FILE);
-	nr_pages += node_page_state(zone->zone_pgdat, NR_ACTIVE_FILE);
+	nr_pages += node_page_state_pgdat(zone->zone_pgdat, NR_INACTIVE_FILE);
+	nr_pages += node_page_state_pgdat(zone->zone_pgdat, NR_ACTIVE_FILE);
 
 	return nr_pages;
 }

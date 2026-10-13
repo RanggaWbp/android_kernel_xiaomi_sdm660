@@ -692,12 +692,12 @@ static bool __too_many_isolated(struct zone *zone, int safe)
 {
 	unsigned long active, inactive, isolated;
 
-	inactive = node_page_state(zone->zone_pgdat, NR_INACTIVE_FILE) +
-			node_page_state(zone->zone_pgdat, NR_INACTIVE_ANON);
-	active = node_page_state(zone->zone_pgdat, NR_ACTIVE_FILE) +
-			node_page_state(zone->zone_pgdat, NR_ACTIVE_ANON);
-	isolated = node_page_state(zone->zone_pgdat, NR_ISOLATED_FILE) +
-			node_page_state(zone->zone_pgdat, NR_ISOLATED_ANON);
+	inactive = node_page_state_pgdat(zone->zone_pgdat, NR_INACTIVE_FILE) +
+			node_page_state_pgdat(zone->zone_pgdat, NR_INACTIVE_ANON);
+	active = node_page_state_pgdat(zone->zone_pgdat, NR_ACTIVE_FILE) +
+			node_page_state_pgdat(zone->zone_pgdat, NR_ACTIVE_ANON);
+	isolated = node_page_state_pgdat(zone->zone_pgdat, NR_ISOLATED_FILE) +
+			node_page_state_pgdat(zone->zone_pgdat, NR_ISOLATED_ANON);
 
 	return isolated > (inactive + active) / 2;
 }
