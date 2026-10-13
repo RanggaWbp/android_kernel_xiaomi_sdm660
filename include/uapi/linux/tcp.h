@@ -167,6 +167,7 @@ struct tcp_info {
 	__u32	tcpi_unacked;
 	__u32	tcpi_sacked;
 	__u32	tcpi_lost;
+	__u8	tcpi_delivery_rate_app_limited:1;
 	__u32	tcpi_retrans;
 	__u32	tcpi_fackets;
 
@@ -197,6 +198,13 @@ struct tcp_info {
 	__u64	tcpi_bytes_received; /* RFC4898 tcpEStatsAppHCThruOctetsReceived */
 	__u32	tcpi_segs_out;	     /* RFC4898 tcpEStatsPerfSegsOut */
 	__u32	tcpi_segs_in;	     /* RFC4898 tcpEStatsPerfSegsIn */
+
+	__u32	tcpi_notsent_bytes;
+	__u32	tcpi_min_rtt;
+	__u32	tcpi_data_segs_in;	/* RFC4898 tcpEStatsDataSegsIn */
+	__u32	tcpi_data_segs_out;	/* RFC4898 tcpEStatsDataSegsOut */
+
+	__u64   tcpi_delivery_rate;
 };
 
 /* for TCP_MD5SIG socket option */

@@ -212,7 +212,11 @@ struct tcp_sock {
 	} rack;
 	u16	advmss;		/* Advertised MSS			*/
 	u8	tlp_retrans:1,	/* TLP is a retransmission */
-		unused_1:7;
+		fast_ack_mode:2, /* which fast ack mode? (BBRv3) */
+		tlp_orig_data_app_limited:1, /* app-limited before TLP rtx? */
+		rate_app_limited:1, /* rate_{delivered,interval_us} limited? */
+		is_sack_reneg:1,    /* in recovery from loss with SACK reneg? */
+		unused_1:2;
 	u8	nonagle     : 4,/* Disable Nagle algorithm?             */
 		thin_lto    : 1,/* Use linear timeouts for thin streams */
 		thin_dupack : 1,/* Fast retransmit on first dupack      */
@@ -267,8 +271,16 @@ struct tcp_sock {
 	u32	prr_delivered;	/* Number of newly delivered packets to
 				 * receiver in Recovery. */
 	u32	prr_out;	/* Total number of pkts sent during Recovery. */
+	u32	delivered;	/* Total data packets delivered incl. rexmits */
+	u32	lost;		/* Total data packets lost incl. rexmits */
+	u32	app_limited;	/* limited until "delivered" reaches this val */
 
+	struct skb_mstamp first_tx_mstamp;  /* start of window send phase */
+	u32	rate_delivered;    /* saved rate sample: packets delivered */
+	u32	rate_interval_us;  /* saved rate sample: time elapsed */
+	struct skb_mstamp delivered_mstamp; /* time we reached "delivered" */
  	u32	rcv_wnd;	/* Current receiver window		*/
+	u32	delivered_ce;	/* Total packets delivered with CE mark (BBRv3) */
 	u32	write_seq;	/* Tail(+1) of data held in tcp send buffer */
 	u32	notsent_lowat;	/* TCP_NOTSENT_LOWAT */
 	u32	pushed_seq;	/* Last pushed seq, required to talk to windows */

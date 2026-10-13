@@ -413,6 +413,8 @@ void tcp_ca_openreq_child(struct sock *sk, const struct dst_entry *dst)
 	u32 ca_key = dst_metric(dst, RTAX_CC_ALGO);
 	bool ca_got_dst = false;
 
+	tcp_set_ecn_low_from_dst(sk, dst);
+
 	if (ca_key != TCP_CA_UNSPEC) {
 		const struct tcp_congestion_ops *ca;
 
@@ -494,6 +496,9 @@ struct sock *tcp_create_openreq_child(const struct sock *sk,
 		 */
 		newtp->snd_cwnd = TCP_INIT_CWND;
 		newtp->snd_cwnd_cnt = 0;
+
+		/* There's a bubble in the pipe until at least the first ACK. */
+		newtp->app_limited = ~0U;
 
 		tcp_init_xmit_timers(newsk);
 		newtp->write_seq = newtp->pushed_seq = treq->snt_isn + 1;

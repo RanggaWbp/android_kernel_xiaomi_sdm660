@@ -124,9 +124,11 @@ enum {
 	INET_DIAG_PEERS,
 	INET_DIAG_PAD,
 	INET_DIAG_MARK,
+	INET_DIAG_BBRINFO,
+	__INET_DIAG_MAX,
 };
 
-#define INET_DIAG_MAX INET_DIAG_MARK
+#define INET_DIAG_MAX (__INET_DIAG_MAX - 1)
 
 /* INET_DIAG_MEM */
 
@@ -156,8 +158,43 @@ struct tcp_dctcp_info {
 	__u32	dctcp_ab_tot;
 };
 
+/* INET_DIAG_BBRINFO */
+
+struct tcp_bbr_info {
+	/* u64 bw: max-filtered BW (app throughput) estimate in Byte per sec: */
+	__u32	bbr_bw_lo;		/* lower 32 bits of bw */
+	__u32	bbr_bw_hi;		/* upper 32 bits of bw */
+	__u32	bbr_min_rtt;		/* min-filtered RTT in uSec */
+	__u32	bbr_pacing_gain;	/* pacing gain shifted left 8 bits */
+	__u32	bbr_cwnd_gain;	/* cwnd gain shifted left 8 bits */
+	__u32	bbr_bw_hi_lsb;	/* lower 32 bits of bw_hi */
+	__u32	bbr_bw_hi_msb;	/* upper 32 bits of bw_hi */
+	__u32	bbr_bw_lo_lsb;	/* lower 32 bits of bw_lo */
+	__u32	bbr_bw_lo_msb;	/* upper 32 bits of bw_lo */
+	__u8	bbr_mode;	/* current bbr_mode in state machine */
+	__u8	bbr_phase;	/* current state machine phase */
+	__u8	unused1;	/* alignment padding; not used yet */
+	__u8	bbr_version;	/* BBR algorithm version */
+	__u32	bbr_inflight_lo;	/* lower short-term data volume bound */
+	__u32	bbr_inflight_hi;	/* higher long-term data volume bound */
+	__u32	bbr_extra_acked;	/* max excess packets ACKed in epoch */
+};
+
+/* TCP BBR congestion control bbr_phase as reported in netlink/ss stats. */
+enum tcp_bbr_phase {
+	BBR_PHASE_INVALID		= 0,
+	BBR_PHASE_STARTUP		= 1,
+	BBR_PHASE_DRAIN		= 2,
+	BBR_PHASE_PROBE_RTT		= 3,
+	BBR_PHASE_PROBE_BW_UP	= 4,
+	BBR_PHASE_PROBE_BW_DOWN	= 5,
+	BBR_PHASE_PROBE_BW_CRUISE	= 6,
+	BBR_PHASE_PROBE_BW_REFILL	= 7,
+};
+
 union tcp_cc_info {
 	struct tcpvegas_info	vegas;
 	struct tcp_dctcp_info	dctcp;
+	struct tcp_bbr_info	bbr;
 };
 #endif /* _UAPI_INET_DIAG_H_ */
