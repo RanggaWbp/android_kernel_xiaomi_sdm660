@@ -40,6 +40,18 @@ kehilangan salah satu fitur ini.
   `.sndbuf_expand` / `.tso_segs_goal`, `tcp_cong_control()`,
   `tcp_xmit_recovery()`, `ICSK_CA_PRIV_SIZE` 64->88) yang belum ada di 4.4,
   jadi port mencakup infrastruktur itu lebih dulu.
+- **NoMount** — path redirection VFS (repo `maxsteeel/nomount`) kini masuk
+  sebagai **submodule** `NoMount` yang di-pin di `v2.1.1` (`7046c7a`),
+  bukan salinan vendored lagi. Layout mengikuti branch 4.9:
+  `fs/nomount` -> `../NoMount/kernel/src` (symlink), jadi `fs/Kconfig` dan
+  `fs/Makefile` tidak berubah. Upstream menargetkan kernel modern dan
+  v2.1.1 **tidak** compile di 4.4 (34 error: `full_name_hash` 3-arg,
+  `in_compat_syscall`, `__vfs_getxattr`/`__vfs_setxattr`, arg `inode` di
+  `xattr_handler`, `iterate_shared`, `get_link`). Submodule dibiarkan
+  pristine; shim 4.4 hidup di repo ini sebagai
+  `scripts/nomount/nomount-4.4-compat.patch` (77 baris) yang diterapkan
+  CI lewat `scripts/apply_nomount_compat.sh` (idempotent).
+  `CONFIG_NOMOUNT=y` di kedua defconfig.
 
 ### Diubah
 
@@ -55,10 +67,14 @@ kehilangan salah satu fitur ini.
     (`TCP_CONG_BBR3` ada di dalam `if TCP_CONG_ADVANCED`) tidak diam-diam
     hilang.
   - Validasi baru **gagal-build** kalau `.config` tidak memuat
-    `NTSYNC/IOSCHED_ADIOS/LRU_GEN/TCP_CONG_BBR3/DEFAULT_BBR3=y`, kalau
-    `ntsync.o`/`adios-iosched.o`/`tcp_bbr3.o`/`tcp_plb.o` tidak terbentuk,
-    atau kalau `lru_gen_enabled`/`bbr3_init` tidak ada di `System.map`.
+    `NTSYNC/NOMOUNT/IOSCHED_ADIOS/LRU_GEN/TCP_CONG_BBR3/DEFAULT_BBR3=y`, kalau
+    `ntsync.o`/`adios-iosched.o`/`fs/nomount/nomount.o`/`tcp_bbr3.o`/`tcp_plb.o`
+    tidak terbentuk, atau kalau `lru_gen_enabled`/`bbr3_init` tidak ada di
+    `System.map`.
     Alasan: set simbol di `.config` bukan bukti kode ikut ter-compile.
+  - Step **Apply NoMount 4.4 compat patch** dijalankan tepat setelah
+    checkout (ketiga workflow) — `submodules: recursive` sudah menarik
+    `NoMount`, jadi CI selalu build submodule pristine + patch.
   - `kernel.string` (AnyKernel3) dan tabel fitur release note menampilkan
     `ADIOS`, `NTSYNC`, `MGLRU`, `BBRv3`.
 
