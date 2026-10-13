@@ -350,6 +350,8 @@ mem_cgroup_nodeinfo(struct mem_cgroup *memcg, int nid)
  * @memcg and @zone. This can be the node lruvec, if the memory controller
  * is disabled.
  */
+extern struct mem_cgroup *root_mem_cgroup;
+
 static inline bool mem_cgroup_disabled(void)
 {
 	return !cgroup_subsys_enabled(memory_cgrp_subsys);

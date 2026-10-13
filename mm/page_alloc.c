@@ -2977,7 +2977,8 @@ static int
 __perform_reclaim(gfp_t gfp_mask, unsigned int order,
 					const struct alloc_context *ac)
 {
-	struct reclaim_state reclaim_state;
+	/* mm_walk_args is read by evict_pages(); must start NULL, not stack garbage */
+	struct reclaim_state reclaim_state = { 0 };
 	int progress;
 
 	cond_resched();
@@ -5403,6 +5404,15 @@ static void __paginginit free_area_init_core(struct pglist_data *pgdat)
 	pgdat_page_ext_init(pgdat);
 	spin_lock_init(&pgdat->lru_lock);
 	lruvec_init(node_lruvec(pgdat));
+#ifdef CONFIG_MEMCG
+	/*
+	 * lruvec_init() zeroed it, and mem_cgroup_lruvec() only fills it in
+	 * when it is handed this node's own lruvec. Establish it up front so
+	 * lruvec_pgdat() is never NULL for node_lruvec(), which MGLRU calls
+	 * from reclaim paths.
+	 */
+	node_lruvec(pgdat)->pgdat = pgdat;
+#endif
 	lru_gen_init_state(NULL, node_lruvec(pgdat));
 
 	for (j = 0; j < MAX_NR_ZONES; j++) {
