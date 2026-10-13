@@ -101,9 +101,7 @@ jobs:
           # .config alone is not proof: a symbol under a disabled parent
           # gate is dropped by olddefconfig and the build still goes green.
           fail=0
-          # MGLRU (CONFIG_LRU_GEN) is not gated yet: its 4.9 backport needs
-          # per-node LRU lists and this tree keeps lruvec inside struct zone.
-          for sym in CONFIG_NTSYNC CONFIG_IOSCHED_ADIOS \
+          for sym in CONFIG_NTSYNC CONFIG_IOSCHED_ADIOS CONFIG_LRU_GEN \
                      CONFIG_TCP_CONG_BBR3 CONFIG_DEFAULT_BBR3 ; do
             if ! grep -q "^${sym}=y$" out/.config; then
               echo "::error::${sym}=y missing from out/.config"
@@ -114,6 +112,8 @@ jobs:
                      net/ipv4/tcp_bbr3.o net/ipv4/tcp_plb.o ; do
             [ -f "out/$obj" ] || { echo "::error::out/$obj not built"; fail=1; }
           done
+          grep -q "lru_gen_enabled" out/System.map || {
+            echo "::error::MGLRU (lru_gen_enabled) not linked in"; fail=1; }
           grep -q "bbr3_init" out/System.map || {
             echo "::error::BBRv3 (bbr3_init) not linked in"; fail=1; }
           if [ "$fail" != 0 ]; then
