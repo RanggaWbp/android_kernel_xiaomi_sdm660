@@ -564,7 +564,11 @@
 	ramoops {
 		compatible = "ramoops";
 		memory-region = <&ramoops_mem>;
-		console-size = <0x0 0x200000>;
-		pmsg-size = <0x0 0x200000>;
+		/* record-size creates the oops/panic dump zone; see
+		 * longcheer-sdm660-ramoops.dtsi for the budget rationale.
+		 */
+		record-size = <0x40000>;
+		console-size = <0x40000>;
+		pmsg-size = <0x200000>;
 	};
 };

@@ -13,7 +13,7 @@
 /* ramoops dts configuration */
 / {
 	reserved-memory {
-		ramoops_mem: ramoops_region@b0000000 {
+		ramoops_mem: ramoops_region@a0000000 {
 			compatible = "removed-dma-pool";
 			no-map;
 			reg = <0 0xA0000000 0 0x00400000>;
@@ -25,7 +25,15 @@
 	ramoops {
 		compatible = "ramoops";
 		memory-region = <&ramoops_mem>;
-		console-size = <0x0 0x200000>;
-		pmsg-size = <0x0 0x200000>;
+		/*
+		 * record-size is what creates the oops/panic dump zone. Without
+		 * it ramoops only keeps console + pmsg, so a panic leaves
+		 * nothing in /sys/fs/pstore after the reboot.
+		 * Budget of the 4 MiB region:
+		 *   record 256 KiB (x7 dumps) + console 256 KiB + pmsg 2 MiB.
+		 */
+		record-size = <0x40000>;
+		console-size = <0x40000>;
+		pmsg-size = <0x200000>;
 	};
 };
