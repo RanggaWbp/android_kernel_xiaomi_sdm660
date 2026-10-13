@@ -607,7 +607,7 @@ static inline void mem_cgroup_replace_page(struct page *old, struct page *new)
 }
 
 static inline struct lruvec *mem_cgroup_lruvec(struct pglist_data *pgdat,
-				struct zone *zone, struct mem_cgroup *memcg)
+				struct mem_cgroup *memcg)
 {
 	return node_lruvec(pgdat);
 }
@@ -667,7 +667,7 @@ mem_cgroup_get_lru_size(struct lruvec *lruvec, enum lru_list lru)
 
 static inline void
 mem_cgroup_update_lru_size(struct lruvec *lruvec, enum lru_list lru,
-			      int increment)
+			      enum zone_type zid, int nr_pages)
 {
 }
 
