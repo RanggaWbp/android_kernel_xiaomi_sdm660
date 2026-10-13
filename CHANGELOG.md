@@ -1,5 +1,67 @@
 # CHANGELOG
 
+## [Belum dirilis] — Backport ADIOS, NTSYNC, MGLRU, BBRv3 ke kernel 4.4
+
+### Ditambahkan
+
+Empat fitur dari kernel 4.9 (repo `Kernel_xiaomi_sdm845_CAF`) di-port ke
+kernel 4.4 repo ini. Semua **built-in (`=y`)**, bukan modul: zip AnyKernel3
+hanya mengirim `Image.gz-dtb`, jadi file `.ko` tidak akan pernah sampai ke
+device. Diverifikasi compile dengan toolchain yang sama seperti CI
+(`mvaisakh/gcc-arm64` + `gcc-arm`), dan CI sekarang menolak build yang
+kehilangan salah satu fitur ini.
+
+- **ADIOS** — Adaptive Deadline I/O scheduler (firelzrd 3.3.0) sebagai
+  `elevator_ops` legacy: deadline group per optype (rb-tree + list FIFO),
+  model latensi per bucket ukuran request, batch limit, tunable sysfs.
+  Adaptasi 4.4: `req_op()`/`REQ_OP_*` tidak ada -> klasifikasi lewat
+  `rq->cmd_flags` (`REQ_DISCARD`/`REQ_SECURE`) + `rq_data_dir()`;
+  `ktime_get_ns()` tidak ada -> `ktime_to_ns(ktime_get())`.
+  `CONFIG_IOSCHED_ADIOS=y` + entry `DEFAULT_ADIOS` di `block/Kconfig.iosched`.
+  **CFQ tetap default**; ADIOS dipilih runtime via
+  `/sys/block/<dev>/queue/scheduler`.
+- **NTSYNC** — driver `/dev/ntsync` (emulasi primitive sinkronisasi Windows
+  NT untuk Wine/Proton/emulator). Driver dari tree 4.9 compile tanpa
+  perubahan kode di 4.4: semua API yang dipakai
+  (`anon_inode_getfile`, `schedule_hrtimeout_range_clock`,
+  `get_unused_fd_flags`/`fd_install`, `array_size`/`struct_size`,
+  `kern_path`, `__vfs_setxattr_noperm`, `u64_to_user_ptr`) sudah ada.
+  `CONFIG_NTSYNC=y` di `drivers/misc/Kconfig` + `drivers/misc/Makefile`.
+- **MGLRU** — Multi-Gen LRU v5 (`CONFIG_LRU_GEN=y`, `LRU_GEN_ENABLED=y`,
+  `NR_LRU_GENS=7`, `TIERS_PER_GEN=4`). Memisahkan page evictable ke
+  generasi/tier sehingga reclaim melindungi working set dan melewati page
+  dingin, bukan menyapu satu LRU datar. Di Android efek utamanya menurunkan
+  CPU time kswapd dan mengurangi thrashing saat memori rendah.
+- **BBRv3** — congestion control TCP `bbr3` (google/bbr v3) + PLB
+  (Protective Load Balancing), berdampingan dengan `bbr` v1 (`bbr3` adalah
+  algoritma **aktif by default**, `CONFIG_DEFAULT_BBR3=y`). BBRv3 butuh
+  infrastruktur delivery-rate BBRv1 (`tcp_rate.c`, `struct rate_sample`,
+  `tp->delivered/lost`, `TCP_SKB_CB()->tx.*`, ops slot `.cong_control` /
+  `.sndbuf_expand` / `.tso_segs_goal`, `tcp_cong_control()`,
+  `tcp_xmit_recovery()`, `ICSK_CA_PRIV_SIZE` 64->88) yang belum ada di 4.4,
+  jadi port mencakup infrastruktur itu lebih dulu.
+
+### Diubah
+
+- `arch/arm64/configs/wayne_defconfig` dan
+  `arch/arm64/configs/jasmine-stock_defconfig`: `CONFIG_IOSCHED_ADIOS=y`,
+  `CONFIG_NTSYNC=y`, `CONFIG_LRU_GEN=y` (+ `LRU_GEN_ENABLED`, `NR_LRU_GENS`,
+  `TIERS_PER_GEN`), `CONFIG_TCP_CONG_BBR3=y` + `CONFIG_DEFAULT_BBR3=y`
+  (jasmine sebelumnya `# CONFIG_TCP_CONG_ADVANCED is not set` dan default
+  `cubic` -> sekarang `advanced=y`, `DEFAULT_TCP_CONG="bbr3"`).
+- `.github/workflows/build-kernel.yml` dan `.github/workflows/Build Release.yml`:
+  - Step build memaksa simbol fitur backport ke `.config` lalu menjalankan
+    `olddefconfig`, supaya simbol yang bergantung pada parent gate
+    (`TCP_CONG_BBR3` ada di dalam `if TCP_CONG_ADVANCED`) tidak diam-diam
+    hilang.
+  - Validasi baru **gagal-build** kalau `.config` tidak memuat
+    `NTSYNC/IOSCHED_ADIOS/LRU_GEN/TCP_CONG_BBR3/DEFAULT_BBR3=y`, kalau
+    `ntsync.o`/`adios-iosched.o`/`tcp_bbr3.o`/`tcp_plb.o` tidak terbentuk,
+    atau kalau `lru_gen_enabled`/`bbr3_init` tidak ada di `System.map`.
+    Alasan: set simbol di `.config` bukan bukti kode ikut ter-compile.
+  - `kernel.string` (AnyKernel3) dan tabel fitur release note menampilkan
+    `ADIOS`, `NTSYNC`, `MGLRU`, `BBRv3`.
+
 ## [Belum dirilis] — Hapus profile GPU OC yang terbukti gagal
 
 ### Dihapus

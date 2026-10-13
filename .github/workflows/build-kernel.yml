@@ -215,6 +215,33 @@ jobs:
           export CROSS_COMPILE="$GITHUB_WORKSPACE/toolchains/gcc64/bin/aarch64-elf-"
           export CROSS_COMPILE_ARM32="$GITHUB_WORKSPACE/toolchains/gcc32/bin/arm-eabi-"
           make O=out ${{ matrix.defconfig }}
+
+          # ---------------------------------------------------------------
+          # Force the backported features into .config.
+          #
+          # Everything added by this branch must be BUILT IN (=y), never =m:
+          # the AnyKernel3 zip ships only Image.gz-dtb, so a .ko would never
+          # reach the device and the feature would be invisible on boot.
+          #
+          # NTSYNC/ADIOS/BBR3 hide behind Kconfig symbols that a defconfig
+          # does not necessarily carry (ADIOS and BBR3 sit inside a menu /
+          # `if TCP_CONG_ADVANCED`), so append explicitly and let
+          # olddefconfig resolve the dependencies.
+          # ---------------------------------------------------------------
+          for sym in \
+              CONFIG_NTSYNC=y \
+              CONFIG_IOSCHED_ADIOS=y \
+              CONFIG_LRU_GEN=y \
+              CONFIG_LRU_GEN_ENABLED=y \
+              CONFIG_TCP_CONG_BBR3=y \
+              CONFIG_DEFAULT_BBR3=y ; do
+            grep -q "^${sym%%=*}=" out/.config || echo "$sym" >> out/.config
+          done
+          make O=out olddefconfig
+
+          # BBR3 is a choice entry: selecting DEFAULT_BBR3 is what makes it
+          # the active algorithm. ADIOS is offered as a scheduler but CFQ
+          # stays the boot default -- the user switches at runtime.
           make O=out -j"$(nproc)" 2>&1 | tee build.log
 
       # ---------------------------------------------------------------
@@ -248,6 +275,57 @@ jobs:
           if grep -qiE "fatal error|undefined reference|multiple definition" build.log; then
             echo "::error::build.log mengandung fatal error -- lihat log lengkap"
             grep -inE "fatal error|undefined reference|multiple definition" build.log | head -30
+            exit 1
+          fi
+
+          # ---------------------------------------------------------------
+          # 8a-bis. BACKPORTED-FEATURE GATE.
+          #
+          # Setting a symbol in .config is not proof the code compiled: a
+          # symbol whose parent gate is off (TCP_CONG_BBR3 lives inside
+          # `if TCP_CONG_ADVANCED`) is silently dropped by olddefconfig and
+          # the build still goes green. So check the resolved .config AND
+          # the object files, which is the only real evidence.
+          # ---------------------------------------------------------------
+          check_symbol() {
+            local sym="$1" want="$2" got
+            got="$(sed -n "s/^${sym}=//p" out/.config | tail -1)"
+            if [[ "$got" != "$want" ]]; then
+              echo "::error::${sym} = '${got}', expected '${want}' (fitur hilang dari build)"
+              return 1
+            fi
+            echo "  ok ${sym}=${got}"
+          }
+          fail=0
+          check_symbol CONFIG_NTSYNC y        || fail=1
+          check_symbol CONFIG_IOSCHED_ADIOS y || fail=1
+          check_symbol CONFIG_LRU_GEN y       || fail=1
+          check_symbol CONFIG_TCP_CONG_BBR3 y || fail=1
+          check_symbol CONFIG_DEFAULT_BBR3 y  || fail=1
+
+          # Object files: proves the code was really compiled in, not just
+          # selected in Kconfig.
+          for obj in drivers/misc/ntsync.o block/adios-iosched.o \
+                     mm/vmscan.o net/ipv4/tcp_bbr3.o net/ipv4/tcp_plb.o ; do
+            if [[ ! -f "out/$obj" ]]; then
+              echo "::error::out/$obj tidak ada -- fitur backport tidak ter-compile"
+              fail=1
+            fi
+          done
+
+          # MGLRU is not a separate object: it replaces the reclaim path, so
+          # the only evidence is the symbol in vmlinux.
+          if ! grep -q "lru_gen_enabled" out/System.map 2>/dev/null; then
+            echo "::error::lru_gen_enabled tidak ada di System.map -- MGLRU tidak masuk"
+            fail=1
+          fi
+          # BBRv3 registers as "bbr3"; the ops struct must be linked in.
+          if ! grep -q "bbr3_init\|tcp_plb_update_state" out/System.map 2>/dev/null; then
+            echo "::error::bbr3_init/tcp_plb_update_state tidak ada di System.map"
+            fail=1
+          fi
+          if (( fail )); then
+            echo "::error::validasi fitur backport gagal"
             exit 1
           fi
 
@@ -315,7 +393,7 @@ jobs:
           cat > anykernel.sh << EOF
           ### AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE + DroidSpaces | by RanggaWbp | ${{ env.BUILD_DATE }}
+          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE + ADIOS + NTSYNC + MGLRU + BBRv3 + DroidSpaces | by RanggaWbp | ${{ env.BUILD_DATE }}
           do.devicecheck=1
           do.modules=0
           do.systemless=1
@@ -446,6 +524,10 @@ jobs:
             | **EAS** | Energy-aware scheduling |
             | **DroidSpaces** | LXC/Docker container support (namespaces, cgroups, IPv4/IPv6 NAT) |
             | **BORE** | Burst-Oriented Response Enhancer scheduler |
+            | **ADIOS** | Adaptive Deadline I/O scheduler (`adios`, CFQ tetap default) |
+            | **NTSYNC** | NT sync primitives `/dev/ntsync` (Wine/Proton/emulator) |
+            | **MGLRU** | Multi-Gen LRU page reclaim (MGLRU v5 backport) |
+            | **BBRv3** | TCP congestion control `bbr3` (**aktif by default**, berdampingan dgn `bbr` v1) + PLB |
 
             ## Devices
 
