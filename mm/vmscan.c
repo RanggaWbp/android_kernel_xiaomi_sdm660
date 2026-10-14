@@ -1527,7 +1527,6 @@ static unsigned long isolate_lru_pages(unsigned long nr_to_scan,
 			nr_taken += nr_pages;
 			nr_zone_taken[page_zonenum(page)] += nr_pages;
 			list_move(&page->lru, dst);
-			nr_taken += nr_pages;
 			break;
 
 		case -EBUSY:
@@ -5547,7 +5546,7 @@ static int balance_pgdat(pg_data_t *pgdat, int order, int classzone_idx)
 	int i;
 	unsigned long nr_soft_reclaimed;
 	unsigned long nr_soft_scanned;
-	struct zone *zone;
+	struct zone *zone = NULL;
 	struct scan_control sc = {
 		.gfp_mask = GFP_KERNEL,
 		.order = order,
@@ -5614,11 +5613,21 @@ static int balance_pgdat(pg_data_t *pgdat, int order, int classzone_idx)
 		if (sc.priority < DEF_PRIORITY - 2 || !pgdat_reclaimable(pgdat))
 			sc.may_writepage = 1;
 
-		/* Call soft limit reclaim before calling shrink_node. */
+		/*
+		 * Call soft limit reclaim before calling shrink_node.
+		 * zone is NULL when the loop above found no populated zone
+		 * up to classzone_idx; mem_cgroup_soft_limit_reclaim()
+		 * dereferences it via zone_to_nid()/zone_idx(), so it must
+		 * not be entered in that case.
+		 */
 		sc.nr_scanned = 0;
 		nr_soft_scanned = 0;
-		nr_soft_reclaimed = mem_cgroup_soft_limit_reclaim(zone, sc.order,
+		if (zone)
+			nr_soft_reclaimed =
+				mem_cgroup_soft_limit_reclaim(zone, sc.order,
 						sc.gfp_mask, &nr_soft_scanned);
+		else
+			nr_soft_reclaimed = 0;
 		sc.nr_reclaimed += nr_soft_reclaimed;
 
 		/*
