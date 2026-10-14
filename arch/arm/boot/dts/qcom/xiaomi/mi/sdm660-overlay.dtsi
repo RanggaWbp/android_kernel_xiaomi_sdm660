@@ -564,10 +564,12 @@
 	ramoops {
 		compatible = "ramoops";
 		memory-region = <&ramoops_mem>;
-		/* Zone layout must match the recovery kernel; see
-		 * longcheer-sdm660-ramoops.dtsi for why.
+		/* Zone layout must match longcheer-sdm660-ramoops.dtsi:
+		 * 64-bit cells or ramoops_parse_dt_size() fails with
+		 * -EOVERFLOW and the whole probe is lost.
 		 */
-		console-size = <0x200000>;
-		pmsg-size = <0x200000>;
+		record-size = <0x0 0x200000>;
+		console-size = <0x0 0x100000>;
+		pmsg-size = <0x0 0x100000>;
 	};
 };
