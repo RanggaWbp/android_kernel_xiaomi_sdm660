@@ -26,14 +26,16 @@
 		compatible = "ramoops";
 		memory-region = <&ramoops_mem>;
 		/*
-		 * record-size is what creates the oops/panic dump zone. Without
-		 * it ramoops only keeps console + pmsg, so a panic leaves
-		 * nothing in /sys/fs/pstore after the reboot.
-		 * Budget of the 4 MiB region:
-		 *   record 256 KiB (x7 dumps) + console 256 KiB + pmsg 2 MiB.
+		 * Zone sizes must match the ones the recovery kernel uses for
+		 * this region: console 2 MiB at offset 0, pmsg 2 MiB after it,
+		 * and no dumps zone (record-size absent). Recovery maps the same
+		 * physical range and validates every persistent_ram zone by its
+		 * signature, so any other layout leaves /sys/fs/pstore empty in
+		 * recovery -- which is the only place a panic can be read back
+		 * from on this device. The panic output still lands in the
+		 * console ring, so nothing is lost by dropping the dumps zone.
 		 */
-		record-size = <0x40000>;
-		console-size = <0x40000>;
+		console-size = <0x200000>;
 		pmsg-size = <0x200000>;
 	};
 };
