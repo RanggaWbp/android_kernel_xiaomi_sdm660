@@ -4891,10 +4891,23 @@ static void __meminit setup_zone_pageset(struct zone *zone)
  */
 void __init setup_per_cpu_pageset(void)
 {
+	struct pglist_data *pgdat;
 	struct zone *zone;
 
 	for_each_populated_zone(zone)
 		setup_zone_pageset(zone);
+
+	/*
+	 * Per-node vmstat differentials for node LRUs. This has to happen
+	 * here and not in free_area_init_node(): setup_per_cpu_areas() only
+	 * runs at init/main.c:537, and free_area_init_node() is reached from
+	 * setup_arch() before that. alloc_percpu() that early walks
+	 * pcpu_alloc() with pcpu_nr_slots == 0, indexes
+	 * pcpu_slot[pcpu_nr_slots - 1] and never leaves its restart loop.
+	 */
+	for_each_online_pgdat(pgdat)
+		pgdat->per_cpu_nodestats =
+			alloc_percpu(struct per_cpu_nodestat);
 }
 
 static noinline __init_refok
@@ -5547,6 +5560,14 @@ void __paginginit free_area_init_node(int nid, unsigned long *zones_size,
 
 	pgdat->node_id = nid;
 	pgdat->node_start_pfn = node_start_pfn;
+	/*
+	 * Allocated in setup_per_cpu_pageset(), which runs after
+	 * setup_per_cpu_areas(). alloc_percpu() here would run during
+	 * setup_arch, before the percpu allocator's first chunk exists:
+	 * pcpu_alloc() then indexes pcpu_slot[pcpu_nr_slots - 1] with
+	 * pcpu_nr_slots == 0 and spins in its restart loop.
+	 */
+	pgdat->per_cpu_nodestats = NULL;
 #ifdef CONFIG_HAVE_MEMBLOCK_NODE_MAP
 	get_pfn_range_for_nid(nid, &start_pfn, &end_pfn);
 	pr_info("Initmem setup node %d [mem %#018Lx-%#018Lx]\n", nid,
@@ -5565,13 +5586,6 @@ void __paginginit free_area_init_node(int nid, unsigned long *zones_size,
 
 	reset_deferred_meminit(pgdat);
 	free_area_init_core(pgdat);
-
-#ifdef CONFIG_SMP
-	/* Allocate per-node vmstat differentials for node LRUs */
-	if (!pgdat->per_cpu_nodestats)
-		pgdat->per_cpu_nodestats =
-			alloc_percpu(struct per_cpu_nodestat);
-#endif
 }
 
 #ifdef CONFIG_HAVE_MEMBLOCK_NODE_MAP
