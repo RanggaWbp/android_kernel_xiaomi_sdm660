@@ -1287,6 +1287,13 @@ free_it:
 		 * appear not as the counts should be low
 		 */
 		list_add(&page->lru, &free_pages);
+		/*
+		 * If pagelist are from multiple zones, we should decrease
+		 * NR_ISOLATED_ANON + x on freed pages in here.
+		 */
+		if (!pgdat)
+			dec_node_page_state(page, NR_ISOLATED_ANON +
+					page_is_file_cache(page));
 		continue;
 
 cull_mlocked:
@@ -1908,7 +1915,6 @@ static void move_active_pages_to_lru(struct lruvec *lruvec,
 				list_add(&page->lru, pages_to_free);
 		}
 	}
-	__mod_node_page_state(pgdat, NR_LRU_BASE + lru, pgmoved);
 	if (!is_active_lru(lru))
 		__count_vm_events(PGDEACTIVATE, pgmoved);
 }
@@ -2350,7 +2356,7 @@ unsigned long lruvec_lru_size(struct lruvec *lruvec, enum lru_list lru, int zone
 	if (!mem_cgroup_disabled())
 		lru_size = mem_cgroup_get_lru_size(lruvec, lru);
 	else
-		lru_size = node_page_state(pgdat, NR_LRU_BASE + lru);
+		lru_size = node_page_state_pgdat(pgdat, NR_LRU_BASE + lru);
 
 	for (zid = zone_idx + 1; zid < MAX_NR_ZONES; zid++) {
 		struct zone *zone = &pgdat->node_zones[zid];
@@ -2359,7 +2365,7 @@ unsigned long lruvec_lru_size(struct lruvec *lruvec, enum lru_list lru, int zone
 		if (!zone->managed_pages)
 			continue;
 
-		size = zone_page_state(zone, NR_ZONE_LRU_BASE + lru);
+		size = zone_page_state(zone, NR_ZONE_LRU_BASE + !!is_file_lru(lru));
 		lru_size -= min(size, lru_size);
 	}
 

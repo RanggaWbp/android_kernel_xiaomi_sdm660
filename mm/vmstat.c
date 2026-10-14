@@ -1051,6 +1051,8 @@ const char * const vmstat_text[] = {
 	"pgfault",
 	"pgmajfault",
 
+	"pglazyfreed",
+
 	"pgrefill",
 	"pgsteal_kswapd",
 	"pgsteal_direct",

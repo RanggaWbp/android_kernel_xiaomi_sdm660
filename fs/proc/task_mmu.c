@@ -1592,7 +1592,7 @@ cont:
 			continue;
 
 		list_add(&page->lru, &page_list);
-		inc_zone_page_state(page, NR_ISOLATED_ANON +
+		inc_node_page_state(page, NR_ISOLATED_ANON +
 				page_is_file_cache(page));
 		isolated++;
 		rp->nr_scanned++;

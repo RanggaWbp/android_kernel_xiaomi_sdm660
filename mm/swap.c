@@ -62,6 +62,14 @@ static void __page_cache_release(struct page *page)
 		VM_BUG_ON_PAGE(!PageLRU(page), page);
 		__ClearPageLRU(page);
 		del_page_from_lru_list(page, lruvec, page_off_lru(page));
+		/*
+		 * lru_gen_del_page() sets PG_active back on for a page in the
+		 * youngest generation, undoing the clear page_off_lru() just
+		 * did, and this page is about to be freed.  free_pages_check()
+		 * rejects PAGE_FLAGS_CHECK_AT_FREE, which contains PG_active,
+		 * so clear it here the way release_pages() does.
+		 */
+		__ClearPageActive(page);
 		spin_unlock_irqrestore(&pgdat->lru_lock, flags);
 	}
 	mem_cgroup_uncharge(page);
@@ -449,9 +457,10 @@ static void pagevec_move_tail_fn(struct page *page, struct lruvec *lruvec,
 {
 	int *pgmoved = arg;
 
-	if (PageLRU(page) && !PageActive(page) && !PageUnevictable(page)) {
-		enum lru_list lru = page_lru_base_type(page);
-		list_move_tail(&page->lru, &lruvec->lists[lru]);
+	if (PageLRU(page) && !PageUnevictable(page)) {
+		del_page_from_lru_list(page, lruvec, page_lru(page));
+		ClearPageActive(page);
+		add_page_to_lru_list_tail(page, lruvec, page_lru(page));
 		(*pgmoved)++;
 	}
 }
