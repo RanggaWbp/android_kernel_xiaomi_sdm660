@@ -136,9 +136,21 @@ jobs:
           fetch-depth: 1
           submodules: recursive
 
-      - name: Unshallow KernelSU submodule
+      # actions/checkout clones submodules with fetch-depth 1 and no tags.
+      # KernelSU/kernel/Kbuild then fails `git describe --abbrev=0 --tags`
+      # and falls back to its hardcoded default, so the driver reports
+      # "v4.1.0" regardless of the real commit; `git rev-list --count HEAD`
+      # is 1, so KSU_VERSION comes out as a bogus 30701 instead of 35214.
+      # --tags is required: --unshallow alone does not bring the tags in.
+      - name: Unshallow KernelSU submodule and fetch its tags
         working-directory: kernel/KernelSU
-        run: git fetch --unshallow || true
+        run: |
+          git fetch --unshallow --tags
+          tag="$(git describe --abbrev=0 --tags 2>/dev/null)" || {
+            echo "::error::KernelSU has no tags -- KSU_TAG_NAME would fall back to the hardcoded v4.1.0"
+            exit 1
+          }
+          echo "KernelSU version: ${tag}-$(git rev-parse --short=8 HEAD), $(git rev-list --count HEAD) commits"
 
       # NoMount tracks maxsteeel/nomount upstream and stays pristine. Upstream
       # targets modern kernels; this tree is 4.4, so apply the compat shim here.

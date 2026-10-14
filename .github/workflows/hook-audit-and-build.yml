@@ -133,8 +133,16 @@ jobs:
           fetch-depth: 1
           submodules: recursive
 
-      - name: Unshallow KernelSU submodule
-        run: git -C KernelSU fetch --unshallow 2>/dev/null || true
+      # See build-kernel.yml: --tags is required, and a missing tag must fail
+      # loudly instead of silently falling back to KernelSU's "v4.1.0".
+      - name: Unshallow KernelSU submodule and fetch its tags
+        run: |
+          git -C KernelSU fetch --unshallow --tags
+          tag="$(git -C KernelSU describe --abbrev=0 --tags 2>/dev/null)" || {
+            echo "::error::KernelSU has no tags -- KSU_TAG_NAME would fall back to the hardcoded v4.1.0"
+            exit 1
+          }
+          echo "KernelSU version: ${tag}-$(git -C KernelSU rev-parse --short=8 HEAD), $(git -C KernelSU rev-list --count HEAD) commits"
 
       - name: Apply NoMount 4.4 compat patch
         run: bash scripts/apply_nomount_compat.sh NoMount
@@ -272,8 +280,16 @@ jobs:
           fetch-depth: 1
           submodules: recursive
 
-      - name: Unshallow KernelSU submodule
-        run: git -C KernelSU fetch --unshallow 2>/dev/null || true
+      # See build-kernel.yml: --tags is required, and a missing tag must fail
+      # loudly instead of silently falling back to KernelSU's "v4.1.0".
+      - name: Unshallow KernelSU submodule and fetch its tags
+        run: |
+          git -C KernelSU fetch --unshallow --tags
+          tag="$(git -C KernelSU describe --abbrev=0 --tags 2>/dev/null)" || {
+            echo "::error::KernelSU has no tags -- KSU_TAG_NAME would fall back to the hardcoded v4.1.0"
+            exit 1
+          }
+          echo "KernelSU version: ${tag}-$(git -C KernelSU rev-parse --short=8 HEAD), $(git -C KernelSU rev-list --count HEAD) commits"
 
       - name: Apply NoMount 4.4 compat patch
         run: bash scripts/apply_nomount_compat.sh NoMount

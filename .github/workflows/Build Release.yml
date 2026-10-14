@@ -37,9 +37,17 @@ jobs:
           fetch-depth: 1
           submodules: recursive
 
-      - name: Unshallow KernelSU submodule
+      # See build-kernel.yml: without --tags the submodule keeps no tags and
+      # KernelSU/kernel/Kbuild falls back to its hardcoded "v4.1.0".
+      - name: Unshallow KernelSU submodule and fetch its tags
         working-directory: KernelSU
-        run: git fetch --unshallow || true
+        run: |
+          git fetch --unshallow --tags
+          tag="$(git describe --abbrev=0 --tags 2>/dev/null)" || {
+            echo "::error::KernelSU has no tags -- KSU_TAG_NAME would fall back to the hardcoded v4.1.0"
+            exit 1
+          }
+          echo "KernelSU version: ${tag}-$(git rev-parse --short=8 HEAD), $(git rev-list --count HEAD) commits"
 
       - name: Apply NoMount 4.4 compat patch
         run: bash scripts/apply_nomount_compat.sh NoMount
