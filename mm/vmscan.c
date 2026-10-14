@@ -2381,6 +2381,18 @@ unsigned long lruvec_lru_size(struct lruvec *lruvec, enum lru_list lru, int zone
 #ifdef CONFIG_MEMCG
 static inline struct mem_cgroup *lruvec_memcg_4_9(struct lruvec *lruvec)
 {
+	/*
+	 * The node lruvec is not embedded in a mem_cgroup_per_node, so
+	 * container_of() would hand back a bogus object and ->memcg would
+	 * read whatever happens to sit at that offset.  mem_cgroup_lruvec()
+	 * returns exactly that lruvec whenever the memory controller is
+	 * disabled, and 4.4's shrink_node_memcg() then feeds it straight to
+	 * lru_gen_shrink_lruvec().  The struct's own comment says the memcg
+	 * back pointer exists because container_of() cannot be used here.
+	 */
+	if (lruvec == node_lruvec(lruvec_pgdat(lruvec)))
+		return NULL;
+
 	return container_of(lruvec, struct mem_cgroup_per_node, lruvec)->memcg;
 }
 #else
@@ -2424,6 +2436,16 @@ static int page_lru_tier(struct page *page)
 
 static int get_swappiness(struct mem_cgroup *memcg)
 {
+	/*
+	 * 4.4 drives the MGLRU path for global reclaim through
+	 * shrink_node_memcg() with the node lruvec, which has no memcg, and
+	 * both mem_cgroup_get_nr_swap_pages() and mem_cgroup_swappiness()
+	 * dereference their argument.  Fall back to the global knob, exactly
+	 * as 4.4's own mem_cgroup_swappiness() does for the root case.
+	 */
+	if (!memcg)
+		return vm_swappiness;
+
 	return mem_cgroup_get_nr_swap_pages(memcg) >= MIN_BATCH_SIZE ?
 	       mem_cgroup_swappiness(memcg) : 0;
 }
@@ -3436,7 +3458,12 @@ static bool age_lruvec(struct lruvec *lruvec, struct scan_control *sc,
 
 	nr_to_scan >>= sc->priority;
 
-	if (!mem_cgroup_online(memcg))
+	/*
+	 * memcg is NULL when the lruvec is the node one (memory controller
+	 * off), and mem_cgroup_online() dereferences its argument.  NULL
+	 * behaves like the online/disabled case: no extra scan budget.
+	 */
+	if (memcg && !mem_cgroup_online(memcg))
 		nr_to_scan++;
 
 	if (nr_to_scan && low)
@@ -3831,7 +3858,12 @@ static long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc, int s
 
 	nr_to_scan >>= priority;
 
-	if (!mem_cgroup_online(memcg))
+	/*
+	 * memcg is NULL when the lruvec is the node one (memory controller
+	 * off), and mem_cgroup_online() dereferences its argument.  NULL
+	 * behaves like the online/disabled case: no extra scan budget.
+	 */
+	if (memcg && !mem_cgroup_online(memcg))
 		nr_to_scan++;
 
 	if (!nr_to_scan)
