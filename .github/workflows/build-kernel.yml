@@ -271,6 +271,41 @@ jobs:
           make O=out -j"$(nproc)" 2>&1 | tee build.log
 
       # ---------------------------------------------------------------
+      # 7b. CAPTURE BAKASU VERSION -- otomatis dari build, bukan hardcode.
+      #     Kbuild mencetaknya saat compile:
+      #       -- BakaSU version code: 35229
+      #       -- BakaSU version name: v4.2.0-rc3-d7260ca1-dirty
+      #       -- Supported Managers: KernelSU Official, KOWSU, BakaSU
+      #     Ditulis ke file + diupload sebagai artifact agar job release
+      #     (job lain) bisa membacanya. Gagal keras kalau tidak ketemu,
+      #     supaya release tidak pernah terbit tanpa versi.
+      # ---------------------------------------------------------------
+      - name: Capture BakaSU version (automatic)
+        working-directory: kernel
+        run: |
+          CODE="$(sed -n 's/.*-- BakaSU version code: \([0-9][0-9]*\).*/\1/p' build.log | head -1)"
+          NAME="$(sed -n 's/.*-- BakaSU version name: \([^[:space:]]*\).*/\1/p' build.log | head -1)"
+          MGRS="$(sed -n 's/.*-- Supported Managers:[[:space:]]*\(.*\)/\1/p' build.log | head -1 | sed 's/[[:space:]]*$//')"
+          if [[ -z "$CODE" || -z "$NAME" ]]; then
+            echo "::error::versi BakaSU tidak ketemu di build.log -- Kbuild tidak mencetaknya?"
+            grep -inE "BakaSU version|Supported Managers" build.log | head -10 || true
+            exit 1
+          fi
+          if [[ -z "$MGRS" ]]; then
+            echo "::warning::Supported Managers tidak ketemu di build.log -- lanjut tanpa daftar manager"
+          fi
+          echo "BakaSU version code: ${CODE}"
+          echo "BakaSU version name: ${NAME}"
+          echo "Supported Managers: ${MGRS:-unknown}"
+          OUTFILE="ksu-version-${{ matrix.device }}-${{ matrix.profile }}.env"
+          {
+            echo "KSU_VERSION_CODE=${CODE}"
+            echo "KSU_VERSION_NAME=${NAME}"
+            echo "KSU_MANAGERS=${MGRS:-unknown}"
+          } > "$OUTFILE"
+          echo "wrote $OUTFILE"
+
+      # ---------------------------------------------------------------
       # 8. AUTOMATIC VALIDATION -- item #12 brief: cek output benar2
       #    ada, ukuran wajar, log tidak mengandung fatal error.
       #    build.log HANYA dipakai buat validasi di sini, TIDAK diupload
@@ -418,7 +453,10 @@ jobs:
       # ---------------------------------------------------------------
       # 9. PACKAGE AnyKernel3 -- siap flash langsung, tanpa ekstrak.
       #    Tag BakaSU + SUSFS dicantumkan di kernel.string biar keliatan
-      #    di recovery/flasher app.
+      #    di recovery/flasher app. kernel.string juga memuat versi persis
+      #    BakaSU *yang benar-benar ter-build di job ini* (dari step
+      #    7b "Capture BakaSU version"), jadi TWRP/KernelFlasher selalu
+      #    menampilkan versi yang sesuai tanpa edit manual.
       # ---------------------------------------------------------------
       - name: Package AnyKernel3 zip
         run: |
@@ -430,10 +468,17 @@ jobs:
           RISK_LEVEL="$(grep -E '^RISK_LEVEL=' "../oc-config/${{ env.CONF_FILE }}" | cut -d= -f2 || true)"
           RISK_LEVEL="${RISK_LEVEL:-none}"
 
+          KSU_TAG="$(sed -n 's/.*-- BakaSU version name: \([^[:space:]]*\).*/\1/p' ../kernel/build.log | head -1)"
+          KSU_CODE="$(sed -n 's/.*-- BakaSU version code: \([0-9][0-9]*\).*/\1/p' ../kernel/build.log | head -1)"
+          if [[ -z "$KSU_TAG" || -z "$KSU_CODE" ]]; then
+            echo "::error::versi BakaSU tidak ketemu di kernel/build.log"
+            exit 1
+          fi
+
           cat > anykernel.sh << EOF
           ### AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE + ADIOS + NTSYNC + MGLRU + BBRv3 + LZ4 + DroidSpaces | by RanggaWbp | ${{ env.BUILD_DATE }}
+          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU ${KSU_TAG} (code ${KSU_CODE}) + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE + ADIOS + NTSYNC + MGLRU + BBRv3 + LZ4 + DroidSpaces | by RanggaWbp | ${{ env.BUILD_DATE }}
           do.devicecheck=1
           do.modules=0
           do.systemless=1
@@ -491,6 +536,15 @@ jobs:
           path: ${{ env.ZIP_NAME }}
           retention-days: 30
 
+      # File versi BakaSU (satu per matrix job). Job release mengambil
+      # salah satunya -- semuanya identik karena satu repo + satu commit.
+      - name: Upload BakaSU version file as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ksu-version-${{ matrix.device }}-${{ matrix.profile }}
+          path: kernel/ksu-version-${{ matrix.device }}-${{ matrix.profile }}.env
+          retention-days: 30
+
   # ==========================================================================
   # JOB release -- mengumpulkan SEMUA zip lalu membuat satu release.
   # Dipisah dari job build supaya tidak ada penulisan paralel ke release.
@@ -512,6 +566,38 @@ jobs:
           pattern: zip-*
           merge-multiple: true
           path: zips
+
+      # Ambil file versi BakaSU dari salah satu job build (semuanya
+      # identik -- satu repo, satu commit). Gagal keras kalau tidak ada,
+      # supaya release tidak pernah terbit tanpa versi.
+      - name: Download BakaSU version file
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ksu-version-*
+          merge-multiple: true
+          path: ksuver
+
+      - name: Read BakaSU version (automatic)
+        run: |
+          ls -la ksuver
+          SRC="$(ls -1 ksuver/ksu-version-*.env | head -1)"
+          echo "reading ${SRC}"
+          KSU_VERSION_CODE="$(sed -n 's/^KSU_VERSION_CODE=//p' "$SRC" | head -1)"
+          KSU_VERSION_NAME="$(sed -n 's/^KSU_VERSION_NAME=//p' "$SRC" | head -1)"
+          KSU_MANAGERS="$(sed -n 's/^KSU_MANAGERS=//p' "$SRC" | head -1)"
+          if [[ -z "$KSU_VERSION_CODE" || -z "$KSU_VERSION_NAME" ]]; then
+            echo "::error::file versi BakaSU kosong/rusak: ${SRC}"
+            cat "$SRC" || true
+            exit 1
+          fi
+          echo "BakaSU version code: ${KSU_VERSION_CODE}"
+          echo "BakaSU version name: ${KSU_VERSION_NAME}"
+          echo "Supported Managers: ${KSU_MANAGERS}"
+          {
+            echo "KSU_VERSION_CODE=${KSU_VERSION_CODE}"
+            echo "KSU_VERSION_NAME=${KSU_VERSION_NAME}"
+            echo "KSU_MANAGERS=${KSU_MANAGERS}"
+          } >> "$GITHUB_ENV"
 
       - name: List collected zips
         run: |
@@ -556,7 +642,7 @@ jobs:
 
             | Feature | Description |
             | :------ | :---------- |
-            | **BakaSU** | Kernel-based root solution |
+            | **BakaSU** | Kernel-based root solution — **${{ env.KSU_VERSION_NAME }}** (code `${{ env.KSU_VERSION_CODE }}`), managers: ${{ env.KSU_MANAGERS }} |
             | **SUSFS** | Root-hiding filesystem layer |
             | **Re:Kernel** | Kernel-level hardening |
             | **NoMount** | Mount namespace isolation |
