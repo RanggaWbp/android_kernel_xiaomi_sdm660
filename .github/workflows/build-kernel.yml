@@ -158,6 +158,14 @@ jobs:
         working-directory: kernel
         run: bash scripts/apply_nomount_compat.sh NoMount
 
+      # BakaSU upstream suspends the SUSFS build with an unconditional
+      # $(error) in kernel/tools/susfs_compat.mk, which Kbuild includes
+      # whenever CONFIG_KSU_SUSFS is set. Neutralise it at build time and
+      # keep the submodule pristine, same as NoMount above.
+      - name: Re-enable SUSFS in the KernelSU submodule
+        working-directory: kernel
+        run: bash scripts/apply_ksu_susfs_unsuspend.sh KernelSU
+
       - name: Free up disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
@@ -339,6 +347,17 @@ jobs:
             echo "::error::lru_gen_enabled tidak ada di System.map -- MGLRU tidak masuk"
             fail=1
           fi
+          # LZ4 was re-synced to upstream lz4/lz4, which renamed every entry
+          # point (LZ4_compress_default, LZ4_decompress_safe, LZ4_compress_HC).
+          # The old names are gone, so a consumer left on the old API would
+          # still link against nothing here.
+          for sym in LZ4_compress_default LZ4_decompress_safe \
+                     LZ4_compress_HC LZ4_decompress_fast ; do
+            if ! grep -q " ${sym}$" out/System.map 2>/dev/null; then
+              echo "::error::${sym} tidak ada di System.map -- lz4 upstream tidak masuk"
+              fail=1
+            fi
+          done
           # BBRv3 registers as "bbr3"; the ops struct must be linked in.
           if ! grep -q "bbr3_init\|tcp_plb_update_state" out/System.map 2>/dev/null; then
             echo "::error::bbr3_init/tcp_plb_update_state tidak ada di System.map"
@@ -413,7 +432,7 @@ jobs:
           cat > anykernel.sh << EOF
           ### AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE + ADIOS + NTSYNC + MGLRU + BBRv3 + DroidSpaces | by RanggaWbp | ${{ env.BUILD_DATE }}
+          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE + ADIOS + NTSYNC + MGLRU + BBRv3 + LZ4 + DroidSpaces | by RanggaWbp | ${{ env.BUILD_DATE }}
           do.devicecheck=1
           do.modules=0
           do.systemless=1
@@ -548,6 +567,7 @@ jobs:
             | **NTSYNC** | NT sync primitives `/dev/ntsync` (Wine/Proton/emulator) |
             | **MGLRU** | Multi-Gen LRU page reclaim (MGLRU v5 backport) |
             | **BBRv3** | TCP congestion control `bbr3` (**aktif by default**, berdampingan dgn `bbr` v1) + PLB |
+            | **LZ4** | Upstream `lz4/lz4` (v1.9.x) compression: `lib/lz4` + crypto `lz4`/`lz4hc` + squashfs LZ4 + initramfs/initrd LZ4 |
 
             ## Devices
 

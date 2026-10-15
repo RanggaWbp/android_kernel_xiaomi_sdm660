@@ -35,6 +35,8 @@
 # NoMount 4.4 compat shim must be tracked: CI applies it to the pristine
 # upstream submodule at build time.
 !scripts/nomount/*.patch
+# Same for the KernelSU SUSFS guard patch.
+!scripts/ksu/*.patch
 *.gcno
 *.ll
 modules.builtin

@@ -1,0 +1,12 @@
+diff --git a/kernel/tools/susfs_compat.mk b/kernel/tools/susfs_compat.mk
+index 9a70255d..91d84343 100644
+--- a/kernel/tools/susfs_compat.mk
++++ b/kernel/tools/susfs_compat.mk
+@@ -17,4 +17,4 @@ endif
+ 
+ $(info -- $(REPO_NAME): susfs has NOT update with latest KernelSU source)
+ $(info -- $(REPO_NAME): Please wait simonpunk update)
+-$(error Please wait susfs update.)
+\ No newline at end of file
++$(warning susfs_compat: upstream's unconditional $(error) removed by local patch)
+\ No newline at end of file

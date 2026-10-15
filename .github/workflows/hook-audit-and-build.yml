@@ -147,6 +147,12 @@ jobs:
       - name: Apply NoMount 4.4 compat patch
         run: bash scripts/apply_nomount_compat.sh NoMount
 
+      # BakaSU suspends the SUSFS build with an unconditional $(error) in
+      # kernel/tools/susfs_compat.mk, included by Kbuild whenever
+      # CONFIG_KSU_SUSFS is set. Neutralise it here; submodule stays pristine.
+      - name: Re-enable SUSFS in the KernelSU submodule
+        run: bash scripts/apply_ksu_susfs_unsuspend.sh KernelSU
+
       - name: Free up disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
@@ -293,6 +299,12 @@ jobs:
 
       - name: Apply NoMount 4.4 compat patch
         run: bash scripts/apply_nomount_compat.sh NoMount
+
+      # BakaSU suspends the SUSFS build with an unconditional $(error) in
+      # kernel/tools/susfs_compat.mk, included by Kbuild whenever
+      # CONFIG_KSU_SUSFS is set. Neutralise it here; submodule stays pristine.
+      - name: Re-enable SUSFS in the KernelSU submodule
+        run: bash scripts/apply_ksu_susfs_unsuspend.sh KernelSU
 
       - name: Free up disk space
         run: |
