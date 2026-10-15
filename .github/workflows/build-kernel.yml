@@ -231,6 +231,28 @@ jobs:
             "kernel"
 
       # ---------------------------------------------------------------
+      # 6b. EAS ENERGY MODEL GATE -- jalankan SEBELUM compile.
+      #
+      # kernel/sched/energy.c reads the DT property "sched-energy-costs"
+      # (no vendor prefix). A CPU node carrying "qcom,sched-energy-costs"
+      # is invisible: init_sched_energy_costs() bails on the first CPU,
+      # no sge is allocated, update_cpu_capacity() leaves every CPU at
+      # SCHED_CAPACITY_SCALE, and EAS silently runs on flat capacities.
+      # The device log shows exactly that:
+      #     sched-energy: CPU device node has no sched-energy-costs
+      #     Invalid sched_group_energy for CPU0..7
+      # The old verifier only parsed the four tables, never the reference
+      # to them, so it passed while the model was dead code. Checks H and I
+      # close that hole: H asserts the property name, I asserts every cap
+      # equals round(cap_max * f / f_max).
+      # ---------------------------------------------------------------
+      - name: Verify EAS energy model (pre-build gate)
+        run: |
+          set -o pipefail
+          python3 oc-config/.github/scripts/verify_eas_model.py \
+            kernel/arch/arm/boot/dts/qcom/sdm660.dtsi 2>&1 | tee eas-model.log
+
+      # ---------------------------------------------------------------
       # 7. BUILD
       # ---------------------------------------------------------------
       - name: Build kernel

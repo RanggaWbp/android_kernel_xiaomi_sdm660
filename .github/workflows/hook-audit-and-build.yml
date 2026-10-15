@@ -86,8 +86,16 @@ jobs:
           chmod +x .github/scripts/audit_hooks.sh
           bash .github/scripts/audit_hooks.sh "$GITHUB_WORKSPACE" 2>&1 | tee audit-hooks.log
 
+      # `set -o pipefail` is load-bearing, not decoration. GitHub's default
+      # shell is `bash -e {0}` -- `-e` does NOT propagate through a pipe, so
+      # every `... | tee x.log` above returns the exit status of `tee` (0)
+      # and a failing audit would still be reported as success. That is why
+      # the dead energy model survived: verify_eas_model.py printed FAIL and
+      # the job stayed green. With pipefail the script's status is the
+      # pipeline's status, so a FAIL actually fails the job.
       - name: Verify EAS energy model
         run: |
+          set -o pipefail
           python3 .github/scripts/verify_eas_model.py \
             arch/arm/boot/dts/qcom/sdm660.dtsi 2>&1 | tee audit-eas.log
 

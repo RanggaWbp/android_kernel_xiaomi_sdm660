@@ -173,6 +173,61 @@ def main():
 
     print()
 
+    # ---- H: the DT property name must match what the kernel reads --------
+    #
+    # kernel/sched/energy.c looks up the *unprefixed* name:
+    #
+    #     of_find_property(cn, "sched-energy-costs", NULL)
+    #
+    # so a CPU node carrying "qcom,sched-energy-costs" is invisible to EAS.
+    # init_sched_energy_costs() then bails out on the first CPU, no sge is
+    # ever allocated, update_cpu_capacity() falls back to
+    # SCHED_CAPACITY_SCALE for every CPU, and the whole energy model above is
+    # dead code -- the scheduler runs on flat 1024/1024 capacities. That is
+    # exactly what happened here, and every check A-G still passed because
+    # they only parse the tables, never the reference to them.
+    want = "sched-energy-costs"
+    bad = "qcom,sched-energy-costs"
+    n_want = len(re.findall(r"(?<![\w,-])%s\s*=" % re.escape(want), text))
+    n_bad = text.count(bad + " ")
+    ok = n_bad == 0 and n_want > 0
+    print("[H] DT property name: '%s' x%d, '%s' x%d  %s"
+          % (want, n_want, bad, n_bad, "ok" if ok else "FAIL"))
+    print("       (energy.c reads '%s'; the qcom, prefix makes it invisible)" % want)
+    if not ok:
+        rc = 1
+
+    print()
+
+    # ---- I: the cap column must equal round(cap_max * f / f_max) --------
+    #
+    # cap is not a free parameter: arch/arm64/kernel/topology.c takes
+    # cap_states[nr_cap_states-1].cap as the cluster's capacity_orig, and
+    # find_new_capacity() picks the first state with cap >= util. If an
+    # intermediate cap is not the linear frequency ratio it claims to be, the
+    # util->OPP mapping is skewed and EAS mis-prices migrations.
+    FMAX = {"CPU_COST0": 1843200, "CLUSTER_COST0": 1843200,
+            "CPU_COST1": 2457600, "CLUSTER_COST1": 2457600}
+    CM = EXPECT_CAP_MAX
+    for t in TABLES:
+        caps = [c for c, _ in parsed[t]]
+        fmax = FMAX[t]
+        cm = CM[t]
+        bad_idx = []
+        for i, c in enumerate(caps):
+            exp = round(cm * FREQ[t][i] * 1000.0 / fmax)
+            if abs(c - exp) > 1:
+                bad_idx.append((FREQ[t][i], c, exp))
+        ok = not bad_idx
+        print("[I] %-15s cap == round(%d*f/fmax): %s"
+              % (t, cm, "ok" if ok else "FAIL"))
+        if not ok:
+            for f, c, exp in bad_idx:
+                print("       f=%.1fMHz cap=%d expected=%d" % (f, c, exp))
+            rc = 1
+
+    print()
+
     # ---- G: idle tables -------------------------------------------------
     for t in TABLES:
         arr = idles[t]
