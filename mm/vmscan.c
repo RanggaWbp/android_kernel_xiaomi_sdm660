@@ -3331,13 +3331,13 @@ unlock:
 
 /* Main function used by the foreground, the background and the user-triggered aging. */
 static bool try_to_inc_max_seq(struct lruvec *lruvec, struct scan_control *sc, int swappiness,
-			       unsigned long max_seq, bool use_filter)
+			       unsigned long max_seq, bool use_filter,
+			       struct mem_cgroup *memcg)
 {
 	bool last;
 	struct mm_walk_args *args;
 	struct mm_struct *mm = NULL;
 	struct lrugen *lrugen = &lruvec->evictable;
-	struct mem_cgroup *memcg = lruvec_memcg_4_9(lruvec);
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
 	int nid = pgdat->node_id;
 
@@ -3431,11 +3431,10 @@ static long get_nr_evictable(struct lruvec *lruvec, struct scan_control *sc, int
 }
 
 static bool age_lruvec(struct lruvec *lruvec, struct scan_control *sc,
-		       unsigned long min_ttl)
+		       unsigned long min_ttl, struct mem_cgroup *memcg)
 {
 	bool low;
 	long nr_to_scan;
-	struct mem_cgroup *memcg = lruvec_memcg_4_9(lruvec);
 	int swappiness = get_swappiness(memcg);
 	DEFINE_MAX_SEQ(lruvec);
 	DEFINE_MIN_SEQ(lruvec);
@@ -3467,7 +3466,7 @@ static bool age_lruvec(struct lruvec *lruvec, struct scan_control *sc,
 		nr_to_scan++;
 
 	if (nr_to_scan && low)
-		try_to_inc_max_seq(lruvec, sc, swappiness, max_seq, true);
+		try_to_inc_max_seq(lruvec, sc, swappiness, max_seq, true, memcg);
 
 	return true;
 }
@@ -3494,7 +3493,7 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 	do {
 		struct lruvec *lruvec = mem_cgroup_lruvec(pgdat, memcg);
 
-		if (age_lruvec(lruvec, sc, min_ttl))
+		if (age_lruvec(lruvec, sc, min_ttl, memcg))
 			success = true;
 
 		cond_resched();
@@ -3835,11 +3834,11 @@ static int evict_pages(struct lruvec *lruvec, struct scan_control *sc, int swapp
 	return scanned;
 }
 
-static long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc, int swappiness)
+static long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc,
+			   int swappiness, struct mem_cgroup *memcg)
 {
 	bool low;
 	long nr_to_scan;
-	struct mem_cgroup *memcg = lruvec_memcg_4_9(lruvec);
 	int priority = sc->priority;
 	DEFINE_MAX_SEQ(lruvec);
 	DEFINE_MIN_SEQ(lruvec);
@@ -3889,17 +3888,29 @@ static long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc, int s
 		return 0;
 	}
 
-	return try_to_inc_max_seq(lruvec, sc, swappiness, max_seq, true) ? nr_to_scan : 0;
+	return try_to_inc_max_seq(lruvec, sc, swappiness, max_seq, true, memcg) ? nr_to_scan : 0;
 }
 
 /* Returns the number of pages MGLRU actually scanned for this lruvec. */
 static unsigned long lru_gen_shrink_lruvec(struct lruvec *lruvec,
-					   struct scan_control *sc)
+					   struct scan_control *sc,
+					   struct mem_cgroup *memcg)
 {
 	struct blk_plug plug;
 	long scanned = 0;
-	struct mem_cgroup *memcg = lruvec_memcg_4_9(lruvec);
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
+
+	/*
+	 * Take the memcg from the caller (shrink_node_memcg, which owns it)
+	 * rather than re-deriving it from the lruvec: lruvec_memcg_4_9()
+	 * uses container_of(), which is only valid for a memcg lruvec, and
+	 * on this integration it has been seen to hand back a pointer that
+	 * is neither NULL nor a mem_cgroup.
+	 */
+	printk_once(KERN_ERR
+		    "lru_gen: lruvec=%p pgdat=%p node_lruvec=%p disabled=%d memcg=%p\n",
+		    lruvec, pgdat, node_lruvec(pgdat),
+		    mem_cgroup_disabled(), memcg);
 
 	lru_add_drain();
 
@@ -3920,7 +3931,7 @@ static unsigned long lru_gen_shrink_lruvec(struct lruvec *lruvec,
 		else
 			swappiness = 0;
 
-		nr_to_scan = get_nr_to_scan(lruvec, sc, swappiness);
+		nr_to_scan = get_nr_to_scan(lruvec, sc, swappiness, memcg);
 		if (!nr_to_scan)
 			break;
 
@@ -4361,7 +4372,8 @@ static int run_aging(struct lruvec *lruvec, struct scan_control *sc, int swappin
 	DEFINE_MAX_SEQ(lruvec);
 
 	if (seq == max_seq)
-		try_to_inc_max_seq(lruvec, sc, swappiness, max_seq, use_filter);
+		try_to_inc_max_seq(lruvec, sc, swappiness, max_seq, use_filter,
+				   lruvec_memcg_4_9(lruvec));
 
 	return seq > max_seq ? -EINVAL : 0;
 }
@@ -4656,7 +4668,7 @@ static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 	 * leaving *lru_pages unset would read uninitialised stack here.
 	 */
 	if (lru_gen_enabled()) {
-		*lru_pages = lru_gen_shrink_lruvec(lruvec, sc);
+		*lru_pages = lru_gen_shrink_lruvec(lruvec, sc, memcg);
 		return;
 	}
 #endif
