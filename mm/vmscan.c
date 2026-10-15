@@ -2437,17 +2437,31 @@ static int page_lru_tier(struct page *page)
 static int get_swappiness(struct mem_cgroup *memcg)
 {
 	/*
-	 * 4.4 drives the MGLRU path for global reclaim through
-	 * shrink_node_memcg() with the node lruvec, which has no memcg, and
-	 * both mem_cgroup_get_nr_swap_pages() and mem_cgroup_swappiness()
-	 * dereference their argument.  Fall back to the global knob, exactly
-	 * as 4.4's own mem_cgroup_swappiness() does for the root case.
+	 * Do not use mem_cgroup_get_nr_swap_pages() here.  Its loop
+	 *
+	 *	for (; memcg != root_mem_cgroup; memcg = parent_mem_cgroup(memcg))
+	 *
+	 * assumes the memcg hierarchy reaches root_mem_cgroup, but 4.4's
+	 * parent_mem_cgroup() returns NULL as soon as memory.parent is NULL,
+	 * which is the normal state for a memcg without use_hierarchy.  The
+	 * loop then walks past the end with memcg == NULL and faults at
+	 * offsetof(struct mem_cgroup, memsw.limit) == 0xe8, which is what
+	 * kswapd0 hit:
+	 *
+	 *   PC is at mem_cgroup_get_nr_swap_pages+0x28/0x60
+	 *   LR is at get_swappiness+0x18/0x64
+	 *   Unable to handle kernel NULL pointer dereference at ... 000000e8
+	 *   Code: ... 540001c0 (f9407423)      -> ldr x3, [x1, #0xe8]
+	 *
+	 * Nothing in the 4.4 baseline calls that function; it is only
+	 * reachable because the MGLRU port reintroduced this helper.  Use the
+	 * same plain swappiness 4.4's shrink_node_memcg() already reads for
+	 * get_scan_count(), which needs no hierarchy walk.
 	 */
 	if (!memcg)
 		return vm_swappiness;
 
-	return mem_cgroup_get_nr_swap_pages(memcg) >= MIN_BATCH_SIZE ?
-	       mem_cgroup_swappiness(memcg) : 0;
+	return mem_cgroup_swappiness(memcg);
 }
 
 static struct lruvec *get_lruvec(int nid, struct mem_cgroup *memcg)
