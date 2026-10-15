@@ -347,10 +347,11 @@ jobs:
             echo "::error::lru_gen_enabled tidak ada di System.map -- MGLRU tidak masuk"
             fail=1
           fi
-          # LZ4 was re-synced to upstream lz4/lz4, which renamed every entry
-          # point (LZ4_compress_default, LZ4_decompress_safe, LZ4_compress_HC).
-          # The old names are gone, so a consumer left on the old API would
-          # still link against nothing here.
+          # LZ4 was re-synced to the kernel's own copy of the library
+          # (torvalds/linux master lib/lz4), which renamed every entry point
+          # (LZ4_compress_default, LZ4_decompress_safe, LZ4_compress_HC).
+          # The old LG-era names are gone, so a consumer left on the old API
+          # would still link against nothing here.
           for sym in LZ4_compress_default LZ4_decompress_safe \
                      LZ4_compress_HC LZ4_decompress_fast ; do
             if ! grep -q " ${sym}$" out/System.map 2>/dev/null; then
@@ -567,7 +568,7 @@ jobs:
             | **NTSYNC** | NT sync primitives `/dev/ntsync` (Wine/Proton/emulator) |
             | **MGLRU** | Multi-Gen LRU page reclaim (MGLRU v5 backport) |
             | **BBRv3** | TCP congestion control `bbr3` (**aktif by default**, berdampingan dgn `bbr` v1) + PLB |
-            | **LZ4** | Upstream `lz4/lz4` (v1.9.x) compression: `lib/lz4` + crypto `lz4`/`lz4hc` + squashfs LZ4 + initramfs/initrd LZ4 |
+            | **LZ4** | `lib/lz4` re-synced to the Linux kernel's own copy (`torvalds/linux` master, LZ4 v1.8.x base — the kernel does not track lz4/lz4 v1.9+): `lib/lz4` + crypto `lz4`/`lz4hc` + squashfs LZ4 + initramfs/initrd LZ4 |
 
             ## Devices
 
