@@ -1,38 +1,44 @@
 # CHANGELOG
 
-## [Belum dirilis] — lmkd userspace (driver LMK kernel dimatikan)
+## [Belum dirilis] — LMK kernel driver aktif di wayne + jasmine
 
 ### Diubah
 
-- `arch/arm64/configs/jasmine-stock_defconfig`:
-  `CONFIG_ANDROID_LOW_MEMORY_KILLER=y` -> `# ... is not set`
-  (`wayne_defconfig` sudah off dari awal, jadi cukup satu file).
-- `.github/workflows/build-kernel.yml`: gate build sekarang menuntut
-  `CONFIG_ANDROID_LOW_MEMORY_KILLER` absen, plus `CONFIG_MEMCG=y` dan
-  `CONFIG_MEMCG_SWAP=y`.
+- `arch/arm64/configs/wayne_defconfig`: tambah
+  `CONFIG_ANDROID_LOW_MEMORY_KILLER=y` +
+  `CONFIG_ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES=y`
+  (sebelumnya tidak pernah diset -> default Kconfig n, driver tidak pernah
+  ikut ter-compile di Mi 6X).
+- `arch/arm64/configs/jasmine-stock_defconfig`: nilai sudah `=y`, dipertahankan
+  (sempat dimatikan di commit 876c6590a944 lalu dikembalikan di commit ini).
+- `.github/workflows/build-kernel.yml`: gate build menuntut
+  `CONFIG_ANDROID_LOW_MEMORY_KILLER=y` +
+  `CONFIG_ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES=y` +
+  `CONFIG_MEMCG=y` + `CONFIG_MEMCG_SWAP=y`, dan menuntut object
+  `drivers/staging/android/lowmemorykiller.o` benar-benar terbentuk (simbol di
+  `.config` bukan bukti kode ikut ter-compile).
 
-### Kenapa
+### Cara kerjanya di device
 
-lmkd (Android 9+) memeriksa `/sys/module/lowmemorykiller/parameters/minfree`.
-Selama file itu writable, lmkd masuk mode in-kernel: dia hanya menulis
-minfree/adj ke driver LMK dan tidak pernah memakai kill path userspace.
-Simbol dimatikan -> node sysfs tidak ada -> `has_inkernel_module=false` ->
-lmkd memanggil `init_monitors()` dan memakai vmpressure
-(`/dev/memcg/memory.pressure_level` + `cgroup.event_control`; keduanya sudah
-lama ada di tree 4.4 ini, lihat `mm/memcontrol.c` + `mm/vmpressure.c`).
+Driver ada di `drivers/staging/android/lowmemorykiller.c` (varian CAF: shrinker
+`register_shrinker` + `enable_adaptive_lmk` + `vmpressure_file_min`, lapor kill
+lewat `/dev/lowmemorykiller` poll).
+
+lmkd (Android 9+) melakukan `access("/sys/module/lowmemorykiller/parameters/minfree", W_OK)`
+-> sukses -> `has_inkernel_module = true` -> lmkd masuk mode in-kernel: dia
+hanya menulis `minfree`/`adj` ke driver, dan **driver yang membunuh** proses
+saat free memory turun di bawah ambang untuk tiap `oom_score_adj`. Log lmkd:
+`Using in-kernel low memory killer interface`.
+
+Node yang muncul setelah boot:
+`/sys/module/lowmemorykiller/parameters/{minfree,adj,debug,enable_adaptive_lmk,vmpressure_file_min}`
+dan `/proc/lowmemorykiller` (event kill untuk `sys.lmk.reportkills`).
 
 ### PSI
 
-`CONFIG_PSI` tidak ada di 4.4 dan tidak di-backport (patchset resmi hanya
-untuk 4.9/4.14). Tanpa PSI lmkd otomatis fallback: `init_psi_monitors()`
-gagal -> `init_mp_common(VMPRESS_LEVEL_*)`. Kill path tetap jalan, deteksi
-sedikit lebih kasar karena vmpressure hanya lapor saat reclaim memcg.
-vmpressure tetap terpanggil walau MGLRU aktif: `vmpressure()` di
-`shrink_node()` dan `vmpressure_prio()` di `do_try_to_free_pages()` adalah
-jalur generik, bukan sisa jalur LRU lama.
-
-Syarat sisi ROM: Android 9+ (`lmkd` ada di `/system/bin/lmkd`). Tidak ada
-perubahan userspace di repo kernel ini.
+Tidak dipakai di jalur ini. `CONFIG_PSI` tidak ada di 4.4 dan patchset resmi
+hanya untuk 4.9/4.14; selama driver LMK aktif, lmkd tidak pernah menyentuh
+`/proc/pressure/memory` maupun vmpressure.
 
 ## [Belum dirilis] — Backport ADIOS, NTSYNC, MGLRU, BBRv3 ke kernel 4.4
 

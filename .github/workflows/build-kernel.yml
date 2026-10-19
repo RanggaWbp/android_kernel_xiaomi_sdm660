@@ -386,17 +386,18 @@ jobs:
           check_symbol CONFIG_LRU_GEN y       || fail=1
           check_symbol CONFIG_TCP_CONG_BBR3 y || fail=1
           check_symbol CONFIG_DEFAULT_BBR3 y  || fail=1
-          # Userspace lmkd hanya aktif kalau driver LMK kernel TIDAK ada:
-          # lmkd memakai in-kernel interface begitu
-          # /sys/module/lowmemorykiller/parameters/minfree writable.
-          check_symbol CONFIG_ANDROID_LOW_MEMORY_KILLER "" || fail=1
+          # LMK kernel driver wajib ada di kedua target (wayne + jasmine).
+          # lmkd mendeteksi /sys/module/lowmemorykiller/parameters/minfree lalu
+          # memakai in-kernel interface, jadi driver ini yang membunuh.
+          check_symbol CONFIG_ANDROID_LOW_MEMORY_KILLER y || fail=1
+          check_symbol CONFIG_ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES y || fail=1
           check_symbol CONFIG_MEMCG y          || fail=1
           check_symbol CONFIG_MEMCG_SWAP y     || fail=1
 
           # Object files: proves the code was really compiled in, not just
           # selected in Kconfig.
           for obj in drivers/misc/ntsync.o block/adios-iosched.o \
-                     fs/nomount/nomount.o \
+                     fs/nomount/nomount.o drivers/staging/android/lowmemorykiller.o \
                      mm/vmscan.o net/ipv4/tcp_bbr3.o net/ipv4/tcp_plb.o ; do
             if [[ ! -f "out/$obj" ]]; then
               echo "::error::out/$obj tidak ada -- fitur backport tidak ter-compile"
