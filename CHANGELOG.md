@@ -1,5 +1,39 @@
 # CHANGELOG
 
+## [Belum dirilis] — lmkd userspace (driver LMK kernel dimatikan)
+
+### Diubah
+
+- `arch/arm64/configs/jasmine-stock_defconfig`:
+  `CONFIG_ANDROID_LOW_MEMORY_KILLER=y` -> `# ... is not set`
+  (`wayne_defconfig` sudah off dari awal, jadi cukup satu file).
+- `.github/workflows/build-kernel.yml`: gate build sekarang menuntut
+  `CONFIG_ANDROID_LOW_MEMORY_KILLER` absen, plus `CONFIG_MEMCG=y` dan
+  `CONFIG_MEMCG_SWAP=y`.
+
+### Kenapa
+
+lmkd (Android 9+) memeriksa `/sys/module/lowmemorykiller/parameters/minfree`.
+Selama file itu writable, lmkd masuk mode in-kernel: dia hanya menulis
+minfree/adj ke driver LMK dan tidak pernah memakai kill path userspace.
+Simbol dimatikan -> node sysfs tidak ada -> `has_inkernel_module=false` ->
+lmkd memanggil `init_monitors()` dan memakai vmpressure
+(`/dev/memcg/memory.pressure_level` + `cgroup.event_control`; keduanya sudah
+lama ada di tree 4.4 ini, lihat `mm/memcontrol.c` + `mm/vmpressure.c`).
+
+### PSI
+
+`CONFIG_PSI` tidak ada di 4.4 dan tidak di-backport (patchset resmi hanya
+untuk 4.9/4.14). Tanpa PSI lmkd otomatis fallback: `init_psi_monitors()`
+gagal -> `init_mp_common(VMPRESS_LEVEL_*)`. Kill path tetap jalan, deteksi
+sedikit lebih kasar karena vmpressure hanya lapor saat reclaim memcg.
+vmpressure tetap terpanggil walau MGLRU aktif: `vmpressure()` di
+`shrink_node()` dan `vmpressure_prio()` di `do_try_to_free_pages()` adalah
+jalur generik, bukan sisa jalur LRU lama.
+
+Syarat sisi ROM: Android 9+ (`lmkd` ada di `/system/bin/lmkd`). Tidak ada
+perubahan userspace di repo kernel ini.
+
 ## [Belum dirilis] — Backport ADIOS, NTSYNC, MGLRU, BBRv3 ke kernel 4.4
 
 ### Ditambahkan

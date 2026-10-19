@@ -386,6 +386,12 @@ jobs:
           check_symbol CONFIG_LRU_GEN y       || fail=1
           check_symbol CONFIG_TCP_CONG_BBR3 y || fail=1
           check_symbol CONFIG_DEFAULT_BBR3 y  || fail=1
+          # Userspace lmkd hanya aktif kalau driver LMK kernel TIDAK ada:
+          # lmkd memakai in-kernel interface begitu
+          # /sys/module/lowmemorykiller/parameters/minfree writable.
+          check_symbol CONFIG_ANDROID_LOW_MEMORY_KILLER "" || fail=1
+          check_symbol CONFIG_MEMCG y          || fail=1
+          check_symbol CONFIG_MEMCG_SWAP y     || fail=1
 
           # Object files: proves the code was really compiled in, not just
           # selected in Kconfig.
