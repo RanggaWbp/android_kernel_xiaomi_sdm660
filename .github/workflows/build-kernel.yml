@@ -1,4 +1,4 @@
-name: Build OC Kernel (mi6x & mia2)
+name: Build OC Kernel (mi6x)
 
 # Item #10 brief: 100% otomatis, tanpa proses manual di dalam workflow.
 # Trigger (push/workflow_dispatch) hanya cara MEMULAI workflow -- begitu
@@ -49,7 +49,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        device: [mi6x, mia2]
+        device: [mi6x]
         profile: [normal, oc_cpu_only]
         include:
           # device-specific constants -- dipakai buat AnyKernel3 properties()
@@ -58,9 +58,6 @@ jobs:
           # dtb_model/dtb_board_id: dipakai .github/scripts/verify_appended_dtb.py
           # untuk membuktikan image BENAR-BENAR membawa device tree device ini.
           #   wayne   : sdm660-mtp-wayne.dts   -> model "...MTP WAYNE", board-id <0x020008 0>
-          #   jasmine : sdm660-mtp-jasmine.dts -> model "...MTP" (SAMA dgn generik!),
-          #             board-id <0x030008 0>. Jadi jasmine HARUS dibedakan lewat
-          #             board-id, bukan model -- nama modelnya tidak unik.
           - device: mi6x
             codename: wayne
             dtb_basename: sdm660-mtp-wayne
@@ -70,15 +67,6 @@ jobs:
             defconfig: wayne_defconfig
             device_name2: ""
             is_slot_device: "0"
-          - device: mia2
-            codename: jasmine_sprout
-            dtb_basename: sdm660-mtp-jasmine
-            dtb_model: ""
-            dtb_board_id: "196616 0"
-            display_name: "Mi A2"
-            defconfig: jasmine-stock_defconfig
-            device_name2: "jasmine"
-            is_slot_device: "1"
     env:
       CONF_FILE: configs/${{ matrix.device }}/${{ matrix.profile }}.conf
       # ARTIFACT_NAME TIDAK dihitung dari format string di sini (rawan bug --
@@ -386,7 +374,7 @@ jobs:
           check_symbol CONFIG_LRU_GEN y       || fail=1
           check_symbol CONFIG_TCP_CONG_BBR3 y || fail=1
           check_symbol CONFIG_DEFAULT_BBR3 y  || fail=1
-          # LMK kernel driver wajib ada di kedua target (wayne + jasmine).
+          # LMK kernel driver wajib ada di target build (wayne).
           # lmkd mendeteksi /sys/module/lowmemorykiller/parameters/minfree lalu
           # memakai in-kernel interface, jadi driver ini yang membunuh.
           check_symbol CONFIG_ANDROID_LOW_MEMORY_KILLER y || fail=1
@@ -633,18 +621,17 @@ jobs:
           ls -la zips
           COUNT=$(ls -1 zips/*.zip 2>/dev/null | wc -l)
           echo "collected ${COUNT} zip(s)"
-          # 4 = 2 device x 2 profile. Gagal keras kalau ada yang hilang, supaya
+          # 2 = 1 device x 2 profile. Gagal keras kalau ada yang hilang, supaya
           # release tidak pernah terbit dengan zip tidak lengkap.
-          if [ "$COUNT" -ne 4 ]; then
-            echo "::error::expected 4 zips (mi6x/mia2 x normal/oc_cpu_only), got ${COUNT}"
+          if [ "$COUNT" -ne 2 ]; then
+            echo "::error::expected 2 zips (mi6x x normal/oc_cpu_only), got ${COUNT}"
             exit 1
           fi
 
       - name: Verify every expected zip is present
         run: |
           rc=0
-          for want in kernel-mi6x-normal kernel-mi6x-cpu-only-oc \
-                      kernel-mia2-normal kernel-mia2-cpu-only-oc; do
+          for want in kernel-mi6x-normal kernel-mi6x-cpu-only-oc; do
             if ls zips/${want}-*.zip >/dev/null 2>&1; then
               echo "OK   ${want}"
             else
@@ -663,7 +650,7 @@ jobs:
           fail_on_unmatched_files: true
           files: zips/*.zip
           body: |
-            # Custom OC Kernel — Mi 6X & Mi A2
+            # Custom OC Kernel — Mi 6X
 
             Linux 4.4 (Non-GKI) · ARM64 · commits [`${{ github.sha }}`](https://github.com/RanggaWbp/android_kernel_xiaomi_sdm660/commit/${{ github.sha }})
 
@@ -691,7 +678,6 @@ jobs:
             | Device | Codename | Slot |
             | :----- | :------- | :--- |
             | Xiaomi Mi 6X | `wayne` | A-only |
-            | Xiaomi Mi A2 | `jasmine_sprout` | A/B |
 
             ## Variants
 

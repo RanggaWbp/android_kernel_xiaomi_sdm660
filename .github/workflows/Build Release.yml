@@ -23,12 +23,6 @@ jobs:
             model_prefix: "MI6X"
             device_name2: ""
             is_slot_device: "0"
-          - device: jasmine_sprout
-            defconfig: jasmine-stock_defconfig
-            display_name: "Mi A2"
-            model_prefix: "MIA2"
-            device_name2: "jasmine"
-            is_slot_device: "1"
 
     steps:
       - name: Checkout kernel source
@@ -219,7 +213,7 @@ jobs:
           files: release-files/*.zip
           name: "Kernel ${{ github.ref_name }}"
           body: |
-            # Custom Kernel — Mi 6X & Mi A2
+            # Custom Kernel — Mi 6X
 
             Linux 4.4 (Non-GKI) · ARM64 · tag `${{ github.ref_name }}`
 
@@ -245,7 +239,6 @@ jobs:
             | Device | Codename | Slot |
             | :----- | :------- | :--- |
             | Xiaomi Mi 6X | `wayne` | A-only |
-            | Xiaomi Mi A2 | `jasmine_sprout` | A/B |
 
             ## Flash
 

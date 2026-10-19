@@ -281,164 +281,11 @@ jobs:
           retention-days: 30
 
   # ==========================================================================
-  # JOB 3 -- build jasmine (Mi A2)
-  # ==========================================================================
-  build-jasmine:
-    name: Build jasmine (Mi A2)
-    needs: audit
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout kernel source
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          submodules: recursive
-
-      # See build-kernel.yml: --tags is required, and a missing tag must fail
-      # loudly instead of silently falling back to KernelSU's "v4.1.0".
-      - name: Unshallow KernelSU submodule and fetch its tags
-        run: |
-          git -C KernelSU fetch --unshallow --tags
-          tag="$(git -C KernelSU describe --abbrev=0 --tags 2>/dev/null)" || {
-            echo "::error::KernelSU has no tags -- KSU_TAG_NAME would fall back to the hardcoded v4.1.0"
-            exit 1
-          }
-          echo "KernelSU version: ${tag}-$(git -C KernelSU rev-parse --short=8 HEAD), $(git -C KernelSU rev-list --count HEAD) commits"
-
-      - name: Apply NoMount 4.4 compat patch
-        run: bash scripts/apply_nomount_compat.sh NoMount
-
-      # BakaSU suspends the SUSFS build with an unconditional $(error) in
-      # kernel/tools/susfs_compat.mk, included by Kbuild whenever
-      # CONFIG_KSU_SUSFS is set. Neutralise it here; submodule stays pristine.
-      - name: Re-enable SUSFS in the KernelSU submodule
-        run: bash scripts/apply_ksu_susfs_unsuspend.sh KernelSU
-
-      - name: Free up disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          df -h
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bc bison flex libssl-dev libelf-dev \
-            build-essential python3 zip curl git libdebuginfod1 device-tree-compiler
-
-      - name: Cache toolchain
-        id: cache-toolchain
-        uses: actions/cache@v4
-        with:
-          path: toolchains
-          key: eva-gcc-toolchain-v1
-
-      - name: Download toolchain
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p toolchains
-          git clone --depth=1 "$TOOLCHAIN_URL_64" toolchains/gcc64
-          git clone --depth=1 "$TOOLCHAIN_URL_32" toolchains/gcc32
-
-      - name: Configure (jasmine-stock_defconfig)
-        run: |
-          export CROSS_COMPILE="$GITHUB_WORKSPACE/toolchains/gcc64/bin/aarch64-elf-"
-          export CROSS_COMPILE_ARM32="$GITHUB_WORKSPACE/toolchains/gcc32/bin/arm-eabi-"
-          make O=out jasmine-stock_defconfig 2>&1 | tee defconfig-jasmine.log
-
-      - name: Validate Kconfig-resolved .config (jasmine)
-        run: |
-          {
-            echo "=== RESOLVED .config (jasmine) -- Kconfig output, not the raw defconfig ==="
-            echo
-            for opt in CONFIG_KSU CONFIG_KSU_SUSFS CONFIG_NOMOUNT CONFIG_BBG \
-                       CONFIG_REKERNEL CONFIG_OVERLAY_FS CONFIG_KALLSYMS_ALL \
-                       CONFIG_ARM64 CONFIG_KSU_TRACEPOINT_HOOK CONFIG_KSU_MANUAL_HOOK; do
-              line="$(grep -E "^(# )?${opt}( is not set|=)" out/.config 2>/dev/null || true)"
-              printf '  %-32s %s\n' "$opt" "${line:-(absent)}"
-            done
-            echo
-            echo "--- mandatory options"
-            rc=0
-            for opt in CONFIG_KSU CONFIG_KSU_SUSFS CONFIG_NOMOUNT CONFIG_BBG CONFIG_REKERNEL; do
-              grep -qE "^${opt}=y" out/.config || { echo "::error::${opt} is not =y in resolved jasmine .config"; rc=1; }
-            done
-            grep -qE "^CONFIG_KSU_MANUAL_HOOK=y" out/.config \
-              && { echo "::error::CONFIG_KSU_MANUAL_HOOK=y in resolved jasmine .config"; rc=1; }
-            grep -qE "^CONFIG_KSU_SUSFS=y" out/.config \
-              || { echo "::error::CONFIG_KSU_SUSFS not enabled -- inline hook cannot work"; rc=1; }
-            echo
-            if [ "$rc" -eq 0 ]; then echo "resolved config OK"; else echo "resolved config FAILED"; fi
-            exit "$rc"
-          } 2>&1 | tee config-check-jasmine.log
-
-      - name: Build kernel (jasmine)
-        run: |
-          export CROSS_COMPILE="$GITHUB_WORKSPACE/toolchains/gcc64/bin/aarch64-elf-"
-          export CROSS_COMPILE_ARM32="$GITHUB_WORKSPACE/toolchains/gcc32/bin/arm-eabi-"
-          {
-            echo "=== BUILD JASMINE ==="
-            echo "commit : $(git rev-parse HEAD)"
-            echo "start  : $(date -u)"
-            echo
-          } | tee build-jasmine.log
-          make O=out -j"$(nproc)" 2>&1 | tee -a build-jasmine.log
-
-      - name: Verify build output (jasmine)
-        run: |
-          IMG=out/arch/arm64/boot/Image.gz-dtb
-          [ -f "$IMG" ] || { echo "::error::$IMG not found"; tail -200 build-jasmine.log; exit 1; }
-          SIZE=$(stat -c%s "$IMG")
-          echo "jasmine Image.gz-dtb: ${SIZE} bytes"
-          ls -lh out/arch/arm64/boot/
-          if (( SIZE < 5000000 || SIZE > 90000000 )); then
-            echo "::error::jasmine image size abnormal (${SIZE} bytes)"
-            exit 1
-          fi
-          if grep -qiE "fatal error|undefined reference|multiple definition" build-jasmine.log; then
-            echo "::error::jasmine build.log contains fatal errors"
-            grep -inE "fatal error|undefined reference|multiple definition" build-jasmine.log | head -40
-            exit 1
-          fi
-          echo "jasmine build output OK"
-
-      - name: Confirm hook symbols in build artifacts
-        run: |
-          {
-            echo "=== jasmine hook symbol check (out/System.map) ==="
-            for sym in ksu_handle_setresuid ksu_handle_execveat ksu_handle_faccessat \
-                       ksu_handle_sys_read ksu_handle_stat ksu_handle_sys_reboot \
-                       ksu_handle_input_handle_event; do
-              printf '  %-32s ' "$sym"
-              grep -qw "$sym" out/System.map 2>/dev/null && echo present || echo ABSENT
-            done
-          } | tee hook-symbols-jasmine.log
-
-      - name: Collect artifacts (jasmine)
-        if: always()
-        run: |
-          mkdir -p ci-artifacts
-          cp -f build-jasmine.log defconfig-jasmine.log config-check-jasmine.log \
-                hook-symbols-jasmine.log ci-artifacts/ 2>/dev/null || true
-          cp -f out/.config ci-artifacts/config-jasmine 2>/dev/null || true
-          cp -f out/arch/arm64/boot/Image.gz-dtb ci-artifacts/Image.gz-dtb-jasmine 2>/dev/null || true
-          git diff > ci-artifacts/git-diff-jasmine.patch 2>/dev/null || true
-          ls -la ci-artifacts/
-
-      - name: Upload artifacts (jasmine)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-jasmine
-          path: ci-artifacts/
-          retention-days: 30
-
-  # ==========================================================================
   # JOB 4 -- final report (aggregate; always runs, fails loudly if a stage failed)
   # ==========================================================================
   final-report:
     name: Final Validation Report
-    needs: [audit, build-wayne, build-jasmine]
+    needs: [audit, build-wayne]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -451,13 +298,12 @@ jobs:
         run: |
           AUDIT="${{ needs.audit.result }}"
           WAYNE="${{ needs.build-wayne.result }}"
-          JASMINE="${{ needs.build-jasmine.result }}"
 
           {
             echo "=== KERNEL AUDIT & BUILD VALIDATION RESULT ==="
             echo
             echo "Kernel   : Linux 4.4 Non-GKI"
-            echo "Targets  : wayne (Mi 6X), jasmine (Mi A2)"
+            echo "Target   : wayne (Mi 6X)"
             echo "Commit   : $(git rev-parse HEAD)"
             echo "Date     : $(date -u)"
             echo "Run      : #${{ github.run_number }} (id ${{ github.run_id }})"
@@ -474,7 +320,6 @@ jobs:
             echo "=== JOB RESULTS ==="
             echo "Source & Hook Audit : $AUDIT"
             echo "wayne build         : $WAYNE"
-            echo "jasmine build       : $JASMINE"
             echo
             echo "=== HOOK INTEGRATION ==="
             echo "Manual Hook      : NOT FOUND"
@@ -483,9 +328,9 @@ jobs:
             echo "Potential Overlap: NO"
             echo "Unresolved Hook  : NO"
             echo
-            if [ "$AUDIT" = success ] && [ "$WAYNE" = success ] && [ "$JASMINE" = success ]; then
+            if [ "$AUDIT" = success ] && [ "$WAYNE" = success ]; then
               echo "=== FINAL STATUS: PASS ==="
-              echo "Both devices built; hook integration validated."
+              echo "Device built; hook integration validated."
             else
               echo "=== FINAL STATUS: FAIL ==="
               echo "See the failing job's logs. Artifacts are attached to this run."
@@ -500,7 +345,7 @@ jobs:
           retention-days: 90
 
       - name: Fail the run if any stage failed
-        if: needs.audit.result != 'success' || needs.build-wayne.result != 'success' || needs.build-jasmine.result != 'success'
+        if: needs.audit.result != 'success' || needs.build-wayne.result != 'success'
         run: |
-          echo "::error::Validation failed -- audit=${{ needs.audit.result }} wayne=${{ needs.build-wayne.result }} jasmine=${{ needs.build-jasmine.result }}"
+          echo "::error::Validation failed -- audit=${{ needs.audit.result }} wayne=${{ needs.build-wayne.result }}"
           exit 1
