@@ -219,7 +219,7 @@ jobs:
 
           # GPU speedbin override (patch 0002) DIHAPUS -- terbukti gagal (random
           # reboot / GPU hang) di hardware nyata pada semua profile yang memakainya
-          # (oc_balanced, oc_performance, oc_extreme). Lihat CHANGELOG.md.
+          # (oc_balanced, oc_performance, oc_extreme).
 
       # ---------------------------------------------------------------
       # 6. Suntik nilai override konkret ke DTS device target
@@ -347,7 +347,7 @@ jobs:
           echo "Image.gz-dtb size: ${SIZE} bytes"
           # Sanity range untuk kernel INI (msm-4.4 + KernelSU + SUSFS + banyak
           # driver tambahan). Batas awal 5-40MB TERBUKTI salah -- build 46.8MB
-          # yang gagal karena batas ini ternyata build valid (lihat CHANGELOG).
+          # yang gagal karena batas ini ternyata build valid.
           # Diperlebar ke 5-90MB agar tidak menolak build valid, tapi tetap
           # menangkap kasus benar-benar korup (mis. 0 byte atau file rusak).
           if (( SIZE < 5000000 || SIZE > 90000000 )); then
