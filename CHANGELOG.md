@@ -11,6 +11,11 @@
   ikut ter-compile di Mi 6X).
 - `arch/arm64/configs/jasmine-stock_defconfig`: nilai sudah `=y`, dipertahankan
   (sempat dimatikan di commit 876c6590a944 lalu dikembalikan di commit ini).
+- `.github/workflows/build-kernel.yml` dan `.github/workflows/Build Release.yml`:
+  `kernel.string` (AnyKernel3 `properties()`) dan tabel Features di release
+  body sekarang memuat `LMK`; `Build Release.yml` juga menambah
+  `CONFIG_ANDROID_LOW_MEMORY_KILLER*` + `lowmemorykiller.o` ke validasi
+  backport-feature-nya.
 - `.github/workflows/build-kernel.yml`: gate build menuntut
   `CONFIG_ANDROID_LOW_MEMORY_KILLER=y` +
   `CONFIG_ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES=y` +

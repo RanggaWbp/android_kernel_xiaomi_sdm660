@@ -507,7 +507,7 @@ jobs:
           cat > anykernel.sh << EOF
           ### AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU ${KSU_TAG} (code ${KSU_CODE}) + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE + ADIOS + NTSYNC + MGLRU + BBRv3 + LZ4 + DroidSpaces | by RanggaWbp | ${{ env.BUILD_DATE }}
+          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU ${KSU_TAG} (code ${KSU_CODE}) + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE + ADIOS + NTSYNC + MGLRU + LMK + BBRv3 + LZ4 + DroidSpaces | by RanggaWbp | ${{ env.BUILD_DATE }}
           do.devicecheck=1
           do.modules=0
           do.systemless=1
@@ -682,6 +682,7 @@ jobs:
             | **ADIOS** | Adaptive Deadline I/O scheduler (`adios`, CFQ tetap default) |
             | **NTSYNC** | NT sync primitives `/dev/ntsync` (Wine/Proton/emulator) |
             | **MGLRU** | Multi-Gen LRU page reclaim (MGLRU v5 backport) |
+            | **LMK** | In-kernel low memory killer (`drivers/staging/android/lowmemorykiller.c`, lmkd mode in-kernel: `/sys/module/lowmemorykiller/parameters/minfree`) |
             | **BBRv3** | TCP congestion control `bbr3` (**aktif by default**, berdampingan dgn `bbr` v1) + PLB |
             | **LZ4** | `lib/lz4` re-synced to the Linux kernel's own copy (`torvalds/linux` master, LZ4 v1.8.x base — the kernel does not track lz4/lz4 v1.9+): `lib/lz4` + crypto `lz4`/`lz4hc` + squashfs LZ4 + initramfs/initrd LZ4 |
 
