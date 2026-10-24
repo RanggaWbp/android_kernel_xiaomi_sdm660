@@ -1,8 +1,8 @@
 diff --git a/kernel/src/nomount.c b/kernel/src/nomount.c
-index e698b2a..5f51527 100644
+index 5ad954e..e324159 100644
 --- a/kernel/src/nomount.c
 +++ b/kernel/src/nomount.c
-@@ -630,6 +630,7 @@ static int nm_setattr(IDMAP_ARG struct dentry *dentry, struct iattr *attr)
+@@ -651,6 +651,7 @@ static int nm_setattr(IDMAP_ARG struct dentry *dentry, struct iattr *attr)
      return err;
  }
  
@@ -10,7 +10,7 @@ index e698b2a..5f51527 100644
  static const char *nm_get_link(struct dentry *dentry, struct inode *inode, struct delayed_call *done)
  {
      struct nm_inode_info *info = inode->i_private;
-@@ -645,6 +646,21 @@ static const char *nm_get_link(struct dentry *dentry, struct inode *inode, struc
+@@ -666,6 +667,21 @@ static const char *nm_get_link(struct dentry *dentry, struct inode *inode, struc
  
      return ERR_PTR(-EINVAL);
  }
@@ -32,7 +32,7 @@ index e698b2a..5f51527 100644
  
  static int nm_dir_iterate_dir(struct file *file, struct dir_context *ctx)
  {
-@@ -720,16 +736,23 @@ struct nm_xattr_proxy {
+@@ -757,16 +773,23 @@ struct nm_xattr_proxy {
      const struct xattr_handler *orig;
  };
  
@@ -47,7 +47,7 @@ index e698b2a..5f51527 100644
 +#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
 +    struct inode *inode = d_inode(dentry);
 +#endif
-     if (inode->i_op == &nm_file_iops || inode->i_op == &nm_dir_iops) {
+     if (nm_inode_is_virtual(inode)) {
          struct nm_inode_info *info = inode->i_private;
          if (unlikely(!info || !info->r_path.dentry)) return -ENODATA;
 -        return __vfs_getxattr(info->r_path.dentry, d_inode(info->r_path.dentry), xattr_full_name(handler, name), buffer, size FLAGS_VAL);
@@ -58,8 +58,8 @@ index e698b2a..5f51527 100644
 +    return NM_ORIG_GET(proxy, dentry, inode, name, buffer, size, FLAGS_VAL);
  }
  
- #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0)
-@@ -749,15 +772,22 @@ static int nm_xattr__get(const struct xattr_handler *handler, struct dentry *den
+ #ifdef NM_HAS_XATTR__GET
+@@ -786,15 +809,22 @@ static int nm_xattr__get(const struct xattr_handler *handler, struct dentry *den
  }
  #endif
  
@@ -74,7 +74,7 @@ index e698b2a..5f51527 100644
 +#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
 +    struct inode *inode = d_inode(dentry);
 +#endif
-     if (inode->i_op == &nm_file_iops || inode->i_op == &nm_dir_iops) {
+     if (nm_inode_is_virtual(inode)) {
          struct nm_inode_info *info = inode->i_private;
          if (unlikely(!info || !info->r_path.dentry)) return -ENODATA;
 -        return __vfs_setxattr(IDMAP_PATH(info->r_path) info->r_path.dentry, d_inode(info->r_path.dentry), xattr_full_name(handler, name), buffer, size, flags);
@@ -85,7 +85,7 @@ index e698b2a..5f51527 100644
  }
  
  static int nm_d_revalidate_common(struct inode *parent_inode, const struct qstr *name,
-@@ -874,7 +904,11 @@ static const struct inode_operations nm_file_iops = {
+@@ -909,7 +939,11 @@ static const struct inode_operations nm_file_iops = {
      .getattr = nm_getattr,
      .setattr = nm_setattr,
      .listxattr = nm_listxattr,
@@ -97,7 +97,7 @@ index e698b2a..5f51527 100644
  };
  
  static const struct file_operations nm_dir_fops = {
-@@ -883,7 +917,9 @@ static const struct file_operations nm_dir_fops = {
+@@ -918,7 +952,9 @@ static const struct file_operations nm_dir_fops = {
      .release = nm_release,
      .llseek = default_llseek,
      .read = generic_read_dir,
@@ -107,7 +107,7 @@ index e698b2a..5f51527 100644
  #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
      .iterate = nm_dir_iterate_dir,
  #endif
-@@ -952,11 +988,14 @@ static inline int nomount_hijack_dir_ops(struct nomount_dir_node *dir_node, stru
+@@ -987,11 +1023,14 @@ static inline int nm_hijack_dir_ops(struct nm_dir_node *dir_node, struct inode *
      const struct file_operations *fop = smp_load_acquire(&inode->i_fop);
      struct nm_dir_ops *ops;
      int err;
@@ -125,21 +125,21 @@ index e698b2a..5f51527 100644
  
      if ((ops = nm_get_nm_iop(iop)) || (ops = nm_get_nm_fop(fop))) {
          if (ops->dir_node != dir_node) return -EBUSY;
-@@ -980,7 +1019,9 @@ static inline int nomount_hijack_dir_ops(struct nomount_dir_node *dir_node, stru
+@@ -1015,7 +1054,9 @@ static inline int nm_hijack_dir_ops(struct nm_dir_node *dir_node, struct inode *
      if (fop) {
          ops->fake_fop = *fop;
          ops->fake_fop.owner = THIS_MODULE;
 +#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
-         if (fop->iterate_shared) ops->fake_fop.iterate_shared = nomount_hijacked_iterate_dir;
+         if (fop->iterate_shared) ops->fake_fop.iterate_shared = nm_hijacked_iterate_dir;
 +#endif
  #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
-         if (fop->iterate) ops->fake_fop.iterate = nomount_hijacked_iterate_dir;
+         if (fop->iterate) ops->fake_fop.iterate = nm_hijacked_iterate_dir;
  #endif
 diff --git a/kernel/src/nomount.h b/kernel/src/nomount.h
-index 95deeca..35aee09 100644
+index c850611..ec141e4 100644
 --- a/kernel/src/nomount.h
 +++ b/kernel/src/nomount.h
-@@ -14,6 +14,26 @@
+@@ -16,6 +16,26 @@
  #include <linux/version.h>
  #include <linux/compat.h>
  
@@ -163,10 +163,10 @@ index 95deeca..35aee09 100644
 +#endif
 +/* ===== end 4.4 compat shims ===== */
 +
- #define NOMOUNT_BASE_VERSION "21"
+ #define NOMOUNT_BASE_VERSION "22"
  #ifdef NOMOUNT_COMMIT_COUNT
      #define NOMOUNT_VERSION ""NOMOUNT_BASE_VERSION" ("NOMOUNT_COMMIT_COUNT")"
-@@ -371,10 +391,12 @@ static inline void nm_sync_inode_times(struct inode *v_inode, struct inode *r_in
+@@ -393,10 +413,12 @@ static inline void nm_sync_inode_times(struct inode *v_inode, struct inode *r_in
  
  static inline int nm_call_iterate(struct file *file, struct dir_context *ctx, const struct file_operations *fop)
  {
@@ -180,14 +180,14 @@ index 95deeca..35aee09 100644
          return fop->iterate(file, ctx);
  #endif
      return -ENOTDIR;
-@@ -393,8 +415,10 @@ static inline struct nm_dir_ops *nm_get_nm_iop(const struct inode_operations *io
+@@ -415,8 +437,10 @@ static inline struct nm_dir_ops *nm_get_nm_iop(const struct inode_operations *io
  
  static inline struct nm_dir_ops *nm_get_nm_fop(const struct file_operations *fop) {
      if (unlikely(!fop)) return NULL;
 +#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
-     if (fop->iterate_shared == nomount_hijacked_iterate_dir)
+     if (fop->iterate_shared == nm_hijacked_iterate_dir)
          return container_of(fop, struct nm_dir_ops, fake_fop);
 +#endif
  #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
-     if (fop->iterate == nomount_hijacked_iterate_dir)
+     if (fop->iterate == nm_hijacked_iterate_dir)
          return container_of(fop, struct nm_dir_ops, fake_fop);
