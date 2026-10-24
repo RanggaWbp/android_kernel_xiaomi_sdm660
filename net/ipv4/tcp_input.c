@@ -3816,10 +3816,12 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	if (tp->tlp_high_seq)
 		tcp_process_tlp_ack(sk, ack, flag, &rs);
 
-	/* Advance cwnd if state allows */
-	if (tcp_may_raise_cwnd(sk, flag))
-		tcp_cong_avoid(sk, ack, acked);
-
+	/* Congestion control entry point: dispatches to ->cong_control when the
+	 * algorithm implements it (BBRv3), otherwise runs the legacy
+	 * cwnd-reduction / cong_avoid path. Do NOT call tcp_cong_avoid() here:
+	 * BBRv3 leaves ->cong_avoid NULL, so an unguarded call would crash, and
+	 * for cong_avoid-based algorithms it would double-advance cwnd per ACK.
+	 */
 	if ((flag & FLAG_FORWARD_PROGRESS) || !(flag & FLAG_NOT_DUP)) {
 		struct dst_entry *dst = __sk_dst_get(sk);
 		if (dst)

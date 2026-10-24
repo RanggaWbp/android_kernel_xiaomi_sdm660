@@ -68,8 +68,10 @@ int tcp_register_congestion_control(struct tcp_congestion_ops *ca)
 {
 	int ret = 0;
 
-	/* all algorithms must implement ssthresh and cong_avoid ops */
-	if (!ca->ssthresh || !ca->cong_avoid) {
+	/* all algorithms must implement ssthresh and either cong_avoid
+	 * or its replacement cong_control (BBRv3 implements only cong_control)
+	 */
+	if (!ca->ssthresh || (!ca->cong_avoid && !ca->cong_control)) {
 		pr_err("%s does not implement required ops\n", ca->name);
 		return -EINVAL;
 	}
