@@ -7539,6 +7539,21 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 		return target;
 
 	/*
+	 * Piece-Of-Cake fast path: O(1) idle CPU lookup through the
+	 * per-LLC idle bitmap.  -1 means "not eligible / nothing idle",
+	 * in which case the original scan below runs unchanged.
+	 */
+	{
+		int poc_cpu = sched_poc_select_cpu(p, prev, target);
+
+		if (poc_cpu >= 0) {
+			schedstat_inc(p, se.statistics.nr_wakeups_sis_idle);
+			schedstat_inc(this_rq(), eas_stats.sis_idle);
+			return poc_cpu;
+		}
+	}
+
+	/*
 	 * Otherwise, iterate the domains and find an elegible idle cpu.
 	 */
 	sd = rcu_dereference(per_cpu(sd_llc, target));

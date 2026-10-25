@@ -6,6 +6,7 @@
 #include <linux/sched/deadline.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
+#include <linux/static_key.h>
 #include <linux/stop_machine.h>
 #include <linux/irq_work.h>
 #include <linux/tick.h>
@@ -30,6 +31,26 @@ extern atomic_long_t calc_load_tasks;
 extern void calc_global_load_tick(struct rq *this_rq);
 
 extern long calc_load_fold_active(struct rq *this_rq);
+
+/*
+ * Piece-Of-Cake fast idle CPU selector (kernel/sched/poc_selector.c).
+ * The idle bitmap is maintained by the idle loop and by set_task_cpu();
+ * select_idle_sibling() consults it before running its own scan.
+ */
+#ifdef CONFIG_SCHED_POC_SELECTOR
+extern int sched_poc_select_cpu(struct task_struct *p, int prev_cpu,
+				int target);
+extern void sched_poc_set_idle(int cpu, bool idle);
+extern void sched_poc_resync(void);
+#else
+static inline int sched_poc_select_cpu(struct task_struct *p, int prev_cpu,
+				       int target)
+{
+	return -1;
+}
+static inline void sched_poc_set_idle(int cpu, bool idle) { }
+static inline void sched_poc_resync(void) { }
+#endif
 
 #ifdef CONFIG_SMP
 extern void update_cpu_load_active(struct rq *this_rq);

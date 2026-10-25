@@ -211,6 +211,12 @@ static void cpu_idle_loop(void)
 {
 	while (1) {
 		/*
+		 * Piece-Of-Cake: this CPU is now idle - publish it in the
+		 * per-LLC idle bitmap so wakers can find it in O(1).
+		 */
+		sched_poc_set_idle(smp_processor_id(), true);
+
+		/*
 		 * If the arch has a polling bit, we maintain an invariant:
 		 *
 		 * Our polling bit is clear if we're not scheduled (i.e. if
@@ -276,6 +282,8 @@ static void cpu_idle_loop(void)
 		smp_mb__after_atomic();
 
 		sched_ttwu_pending();
+		/* Piece-Of-Cake: leaving idle, drop this CPU's idle bit. */
+		sched_poc_set_idle(smp_processor_id(), false);
 		schedule_preempt_disabled();
 	}
 }

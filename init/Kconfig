@@ -1349,6 +1349,36 @@ config SCHED_AUTOGROUP
 	  desktop applications.  Task group autogeneration is currently based
 	  upon task session.
 
+config SCHED_POC_SELECTOR
+	bool "Piece-Of-Cake (POC) fast idle CPU selector"
+	depends on SMP
+	default y
+	help
+	  O(1) idle CPU lookup for the CFS wakeup path, inspired by the
+	  "Piece of Cake" idle selection used by the scx_cake scheduler.
+
+	  Idle state is tracked in one atomic64_t bitmap per last-level
+	  cache domain (up to 64 CPUs per word).  select_idle_sibling()
+	  consults that bitmap first, preferring a fully idle core,
+	  avoiding waking an SMT sibling when a whole idle core exists,
+	  and round-robining among the idle CPUs it finds.  Whenever the
+	  fast path is not eligible it returns -1 and the standard CFS
+	  select_idle_cpu() scan runs instead, so behaviour with the
+	  selector disabled is unchanged.
+
+	  Errors are performance-only - the runqueue lock still guarantees
+	  scheduling correctness.
+
+	  All feature knobs (kernel.sched_poc_selector,
+	  kernel.sched_poc_smt_fallback, kernel.sched_poc_smt_consecutive,
+	  kernel.sched_poc_smt_uniform, kernel.sched_poc_target_sticky,
+	  kernel.sched_poc_early_select, kernel.sched_poc_greedy_search,
+	  kernel.sched_poc_aligned, kernel.sched_poc_packed,
+	  kernel.sched_poc_rr_improved, kernel.sched_poc_lockless_bitmap,
+	  kernel.sched_poc_count) are enabled by default.
+
+	  If unsure say Y here.
+
 config SCHED_TUNE
 	bool "Boosting for CFS tasks (EXPERIMENTAL)"
 	depends on SMP

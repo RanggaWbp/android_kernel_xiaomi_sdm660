@@ -21,6 +21,7 @@ obj-y += wait.o completion.o idle.o sched_avg.o
 obj-$(CONFIG_SMP) += cpupri.o cpudeadline.o energy.o
 obj-$(CONFIG_SCHED_HMP) += hmp.o boost.o
 obj-$(CONFIG_SCHED_AUTOGROUP) += auto_group.o
+obj-$(CONFIG_SCHED_POC_SELECTOR) += poc_selector.o
 obj-$(CONFIG_SCHEDSTATS) += stats.o
 obj-$(CONFIG_SCHED_DEBUG) += debug.o
 obj-$(CONFIG_SCHED_TUNE) += tune.o

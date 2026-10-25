@@ -1368,6 +1368,17 @@ void set_task_cpu(struct task_struct *p, unsigned int new_cpu)
 	}
 
 	__set_task_cpu(p, new_cpu);
+
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	/*
+	 * Piece-Of-Cake: a task just landed on new_cpu, so that CPU is
+	 * no longer idle.  Keeps the per-LLC idle bitmap honest between
+	 * the moment the waker picks a CPU and the moment the idle loop
+	 * on it actually exits.  This only ever clears a bit, so it can
+	 * never create a false idle CPU.
+	 */
+	sched_poc_set_idle(new_cpu, false);
+#endif
 }
 
 static void __migrate_swap_task(struct task_struct *p, int cpu)

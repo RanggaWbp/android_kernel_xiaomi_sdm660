@@ -270,7 +270,11 @@ jobs:
               CONFIG_LRU_GEN=y \
               CONFIG_LRU_GEN_ENABLED=y \
               CONFIG_TCP_CONG_BBR3=y \
-              CONFIG_DEFAULT_BBR3=y ; do
+              CONFIG_DEFAULT_BBR3=y \
+              CONFIG_SCHED_POC_SELECTOR=y \
+              CONFIG_CPU_FREQ_GOV_REFLEX=y \
+              CONFIG_CPU_FREQ_DEFAULT_GOV_REFLEX=y \
+              CONFIG_DEFAULT_ADIOS=y ; do
             grep -q "^${sym%%=*}=" out/.config || echo "$sym" >> out/.config
           done
           make O=out olddefconfig
@@ -374,6 +378,10 @@ jobs:
           check_symbol CONFIG_LRU_GEN y       || fail=1
           check_symbol CONFIG_TCP_CONG_BBR3 y || fail=1
           check_symbol CONFIG_DEFAULT_BBR3 y  || fail=1
+          check_symbol CONFIG_SCHED_POC_SELECTOR y || fail=1
+          check_symbol CONFIG_CPU_FREQ_GOV_REFLEX y || fail=1
+          check_symbol CONFIG_CPU_FREQ_DEFAULT_GOV_REFLEX y || fail=1
+          check_symbol CONFIG_DEFAULT_ADIOS y || fail=1
           # LMK kernel driver wajib ada di target build (wayne).
           # lmkd mendeteksi /sys/module/lowmemorykiller/parameters/minfree lalu
           # memakai in-kernel interface, jadi driver ini yang membunuh.
@@ -386,7 +394,8 @@ jobs:
           # selected in Kconfig.
           for obj in drivers/misc/ntsync.o block/adios-iosched.o \
                      fs/nomount/nomount.o drivers/staging/android/lowmemorykiller.o \
-                     mm/vmscan.o net/ipv4/tcp_bbr3.o net/ipv4/tcp_plb.o ; do
+                     mm/vmscan.o net/ipv4/tcp_bbr3.o net/ipv4/tcp_plb.o \
+                     kernel/sched/poc_selector.o drivers/cpufreq/cpufreq_reflex.o ; do
             if [[ ! -f "out/$obj" ]]; then
               echo "::error::out/$obj tidak ada -- fitur backport tidak ter-compile"
               fail=1
@@ -414,6 +423,11 @@ jobs:
           # BBRv3 registers as "bbr3"; the ops struct must be linked in.
           if ! grep -q "bbr3_init\|tcp_plb_update_state" out/System.map 2>/dev/null; then
             echo "::error::bbr3_init/tcp_plb_update_state tidak ada di System.map"
+            fail=1
+          fi
+          # POC-Selector fast idle CPU picker must be linked into vmlinux.
+          if ! grep -q "sched_poc_select_cpu" out/System.map 2>/dev/null; then
+            echo "::error::sched_poc_select_cpu tidak ada di System.map -- POC selector tidak masuk"
             fail=1
           fi
           if (( fail )); then
@@ -495,7 +509,7 @@ jobs:
           cat > anykernel.sh << EOF
           ### AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU ${KSU_TAG} (code ${KSU_CODE}) + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE + ADIOS + NTSYNC + MGLRU + LMK + BBRv3 + LZ4 + DroidSpaces | by RanggaWbp | ${{ env.BUILD_DATE }}
+          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU ${KSU_TAG} (code ${KSU_CODE}) + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE + POC-Selector + REFLEX + ADIOS + NTSYNC + MGLRU + LMK + BBRv3 + LZ4 + DroidSpaces | by RanggaWbp | ${{ env.BUILD_DATE }}
           do.devicecheck=1
           do.modules=0
           do.systemless=1
@@ -519,8 +533,26 @@ jobs:
           RAMDISK_COMPRESSION=auto;
           PATCH_VBMETA_FLAG=auto;
           . tools/ak3-core.sh;
+          ui_print " ";
+          ui_print "================================================";
+          ui_print "   RanggaWbp OC Kernel  -  Xiaomi Mi 6X (wayne)";
+          ui_print "   profile: ${{ matrix.profile }}    risk: ${RISK_LEVEL}";
+          ui_print "   build  : ${{ env.BUILD_DATE }}";
+          ui_print "================================================";
+          ui_print " ";
+          ui_print " Features enabled:";
+          ui_print "   [x] BakaSU ${KSU_TAG} + SUSFS + Re:Kernel + NoMount";
+          ui_print "   [x] EAS + BORE scheduler";
+          ui_print "   [x] POC-Selector  (fast idle CPU pick)";
+          ui_print "   [x] Reflex cpufreq governor (default)";
+          ui_print "   [x] ADIOS I/O scheduler (default)";
+          ui_print "   [x] MGLRU + LMK + NTSYNC + BBRv3 + LZ4";
+          ui_print " ";
+          ui_print " - Unpacking boot image ...";
           dump_boot;
+          ui_print " - Flashing kernel ...";
           write_boot;
+          ui_print " - Done. Reboot and enjoy!";
           EOF
 
           SHORT_SHA="$(cd ../kernel && git rev-parse --short HEAD)"
