@@ -699,7 +699,7 @@ POC_SYSCTL_BOOL_HANDLER(sched_poc_count_handler,
 	.maxlen		= sizeof(int),		\
 	.mode		= 0644,			\
 	.proc_handler	= fn,			\
-}
+},
 
 static struct ctl_table sched_poc_sysctls[] = {
 	POC_CTL_BOOL("sched_poc_selector", sched_poc_selector_sysctl_handler)
