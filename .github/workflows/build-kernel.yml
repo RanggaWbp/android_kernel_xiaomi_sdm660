@@ -280,8 +280,9 @@ jobs:
           make O=out olddefconfig
 
           # BBR3 is a choice entry: selecting DEFAULT_BBR3 is what makes it
-          # the active algorithm. ADIOS is offered as a scheduler but CFQ
-          # stays the boot default -- the user switches at runtime.
+          # the active algorithm. ADIOS is the boot-default I/O scheduler
+          # (CONFIG_DEFAULT_ADIOS=y); Reflex is the boot-default cpufreq governor
+          # (CONFIG_CPU_FREQ_DEFAULT_GOV_REFLEX=y).
           make O=out -j"$(nproc)" 2>&1 | tee build.log
 
       # ---------------------------------------------------------------
@@ -698,7 +699,9 @@ jobs:
             | **EAS** | Energy-aware scheduling |
             | **DroidSpaces** | LXC/Docker container support (namespaces, cgroups, IPv4/IPv6 NAT) |
             | **BORE** | Burst-Oriented Response Enhancer scheduler |
-            | **ADIOS** | Adaptive Deadline I/O scheduler (`adios`, CFQ tetap default) |
+            | **ADIOS** | Adaptive Deadline I/O scheduler (`adios`, boot default (`adios`) |
+            | **POC-Selector** | Piece-Of-Cake O(1) idle CPU picker (`kernel.sched_poc_*` static keys, all on) |
+            | **REFLEX** | schedutil-derived cpufreq governor -- boot default |
             | **NTSYNC** | NT sync primitives `/dev/ntsync` (Wine/Proton/emulator) |
             | **MGLRU** | Multi-Gen LRU page reclaim (MGLRU v5 backport) |
             | **LMK** | In-kernel low memory killer (`drivers/staging/android/lowmemorykiller.c`, lmkd mode in-kernel: `/sys/module/lowmemorykiller/parameters/minfree`) |
