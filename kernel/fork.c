@@ -87,6 +87,10 @@
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
 
+#ifdef CONFIG_SCHED_BORE
+#include <linux/sched/bore.h>
+#endif /* CONFIG_SCHED_BORE */
+
 #include <trace/events/sched.h>
 
 #define CREATE_TRACE_POINTS
@@ -1602,6 +1606,17 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 
 	p->start_time = ktime_get_ns();
 	p->real_start_time = ktime_get_boot_ns();
+
+#ifdef CONFIG_SCHED_BORE
+	/*
+	 * BORE v7.0.0 inherits the burst penalty from the parent subtree /
+	 * thread group here, while clone_flags is still in scope.  The child
+	 * is not linked into the parent's children list yet, which is exactly
+	 * what the inheritance walk wants.
+	 */
+	if (likely(p->pid))
+		task_fork_bore(p, current, clone_flags, p->start_time);
+#endif /* CONFIG_SCHED_BORE */
 
 	/*
 	 * Make it visible to the rest of the system, but dont wake it up yet.

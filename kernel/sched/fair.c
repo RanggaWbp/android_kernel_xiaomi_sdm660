@@ -20,7 +20,10 @@
  *  Copyright (C) 2007 Red Hat, Inc., Peter Zijlstra
  *
  *  Burst-Oriented Response Enhancer (BORE) CPU Scheduler
- *  Copyright (C) 2021-2023 Masahito Suzuki <firelzrd@gmail.com>
+ *  Copyright (C) 2021-2025 Masahito Suzuki <firelzrd@gmail.com>
+ *
+ *  BORE v7.0.0, reimplemented for 4.4 classic CFS.  The scheduler core
+ *  lives in kernel/sched/bore.c; this file only carries the hook sites.
  */
 
 #include <linux/latencytop.h>
@@ -34,6 +37,10 @@
 #include <linux/migrate.h>
 #include <linux/task_work.h>
 #include <linux/module.h>
+
+#ifdef CONFIG_SCHED_BORE
+#include <linux/sched/bore.h>
+#endif /* CONFIG_SCHED_BORE */
 
 #include "sched.h"
 #include <trace/events/sched.h>
@@ -100,72 +107,6 @@ unsigned int sysctl_sched_wakeup_granularity = 1000000UL;
 unsigned int normalized_sysctl_sched_wakeup_granularity = 1000000UL;
 
 const_debug unsigned int sysctl_sched_migration_cost = 500000UL;
-
-#ifdef CONFIG_SCHED_BORE
-unsigned int __read_mostly sched_bore                  = 1;
-unsigned int __read_mostly sched_burst_cache_lifetime  = 60000000;
-unsigned int __read_mostly sched_burst_penalty_offset  = 22;
-unsigned int __read_mostly sched_burst_penalty_scale   = 1366;
-unsigned int __read_mostly sched_burst_smoothness_up   = 1;
-unsigned int __read_mostly sched_burst_smoothness_down = 0;
-unsigned int __read_mostly sched_burst_fork_atavistic  = 2;
-
-#define MAX_BURST_PENALTY ((40U << 8) - 1)
-
-static inline u32 log2plus1_u64_u32f8(u64 v) {
-	x32 result;
-	int msb = fls64(v);
-	int excess_bits = msb - 9;
-	result.u8[0] = (0 <= excess_bits)? v >> excess_bits: v << -excess_bits;
-	result.u8[1] = msb;
-	return result.u32;
-}
-
-static inline u32 calc_burst_penalty(u64 burst_time) {
-	u32 greed, tolerance, penalty, scaled_penalty;
-	
-	greed = log2plus1_u64_u32f8(burst_time);
-	tolerance = sched_burst_penalty_offset << 8;
-	penalty = max(0, (s32)greed - (s32)tolerance);
-	scaled_penalty = penalty * sched_burst_penalty_scale >> 10;
-
-	return min(MAX_BURST_PENALTY, scaled_penalty);
-}
-
-static void update_burst_penalty(struct sched_entity *se) {
-	se->curr_burst_penalty = calc_burst_penalty(se->burst_time);
-	se->burst_penalty = max(se->prev_burst_penalty, se->curr_burst_penalty);
-}
-
-static inline u64
-penalty_scale_mayhalve(u64 delta, struct sched_entity *se, bool half) {
-	u32 score = ((x16*)&se->burst_penalty)->u8[1];
-	if (half) score >>= 1;
-	return mul_u64_u32_shr(delta, prio_to_wmult[score], 22);
-}
-
-#define penalty_scale(delta, se) \
-        (penalty_scale_mayhalve(delta, se, false))
-
-static inline u32 binary_smooth(u32 new, u32 old) {
-  int increment = new - old;
-  return (0 <= increment)?
-    old + ( increment >> sched_burst_smoothness_up):
-    old - (-increment >> sched_burst_smoothness_down);
-}
-
-static void restart_burst(struct sched_entity *se) {
-	se->burst_penalty = se->prev_burst_penalty =
-		binary_smooth(se->curr_burst_penalty, se->prev_burst_penalty);
-	se->curr_burst_penalty = 0;
-	se->burst_time = 0;
-}
-
-static inline void vruntime_backstep(s64 *vdiff, struct sched_entity *se) {
-	u64 delta_exec = se->sum_exec_runtime - se->prev_sum_exec_runtime;
-	*vdiff += delta_exec - penalty_scale(delta_exec, se);
-}
-#endif // CONFIG_SCHED_BORE
 
 /*
  * The exponential sliding  window over which load is averaged for shares
@@ -716,21 +657,11 @@ int sched_proc_update_handler(struct ctl_table *table, int write,
 /*
  * delta /= w
  */
-#ifdef CONFIG_SCHED_BORE
-#define calc_delta_fair_enq(delta, se) __calc_delta_fair(delta, se, true)
-#define calc_delta_fair(delta, se) __calc_delta_fair(delta, se, false)
-static inline u64 __calc_delta_fair(u64 delta, struct sched_entity *se, bool half)
-#else // CONFIG_SCHED_BORE
-#define calc_delta_fair_enq(delta, se) calc_delta_fair(delta, se)
 static inline u64 calc_delta_fair(u64 delta, struct sched_entity *se)
-#endif // CONFIG_SCHED_BORE
 {
 	if (unlikely(se->load.weight != NICE_0_LOAD))
 		delta = __calc_delta(delta, NICE_0_LOAD, &se->load);
 
-#ifdef CONFIG_SCHED_BORE
-	if (likely(sched_bore)) delta = penalty_scale_mayhalve(delta, se, half);
-#endif // CONFIG_SCHED_BORE
 	return delta;
 }
 
@@ -785,7 +716,7 @@ static u64 sched_slice(struct cfs_rq *cfs_rq, struct sched_entity *se)
  */
 static u64 sched_vslice(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
-	return calc_delta_fair_enq(sched_slice(cfs_rq, se), se);
+	return calc_delta_fair(sched_slice(cfs_rq, se), se);
 }
 
 #ifdef CONFIG_SMP
@@ -948,9 +879,10 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	schedstat_add(cfs_rq, exec_clock, delta_exec);
 
 #ifdef CONFIG_SCHED_BORE
-	curr->burst_time += delta_exec;
-	update_burst_penalty(curr);
-#endif // CONFIG_SCHED_BORE
+	if (entity_is_task(curr))
+		update_curr_bore(task_of(curr), delta_exec);
+#endif /* CONFIG_SCHED_BORE */
+
 	curr->vruntime += max(1ULL, calc_delta_fair(delta_exec, curr));
 	update_min_vruntime(cfs_rq);
 
@@ -2691,8 +2623,12 @@ static inline long calc_cfs_shares(struct cfs_rq *cfs_rq, struct task_group *tg)
 }
 # endif /* CONFIG_SMP */
 
-static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
-			    unsigned long weight)
+/*
+ * BORE v7.0.0 needs to reweight a task from kernel/sched/bore.c, so this
+ * loses its 'static' (upstream does the same for reweight_eevdf()).
+ */
+void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
+		    unsigned long weight)
 {
 	if (se->on_rq) {
 		/* commit outstanding execution time */
@@ -4703,6 +4639,25 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int initial)
 
 	/* ensure we never gain time by being placed backwards. */
 	se->vruntime = max_vruntime(se->vruntime, vruntime);
+
+#ifdef CONFIG_SCHED_BORE
+	/*
+	 * BORE v7.0.0 sleep credit.  On EEVDF this shortens se->deadline;
+	 * classic CFS has no deadline, so the equivalent is to pay the credit
+	 * back as vruntime.  Clamped to min_vruntime so a long sleep can never
+	 * push an entity behind the runqueue clock.
+	 */
+	if (!initial && static_branch_unlikely(&sched_credit_key) &&
+	    entity_is_task(se)) {
+		u64 credit = bore_credit_ns(task_of(se));
+
+		if (credit && se->vruntime > cfs_rq->min_vruntime) {
+			u64 room = se->vruntime - cfs_rq->min_vruntime;
+
+			se->vruntime -= credit < room ? credit : room;
+		}
+	}
+#endif /* CONFIG_SCHED_BORE */
 }
 
 static void check_enqueue_throttle(struct cfs_rq *cfs_rq);
@@ -6078,10 +6033,22 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	struct sched_entity *se = &p->se;
 	int task_sleep = flags & DEQUEUE_SLEEP;
 
-	for_each_sched_entity(se) {
 #ifdef CONFIG_SCHED_BORE
-		if (task_sleep) restart_burst(se);
-#endif // CONFIG_SCHED_BORE
+	/*
+	 * BORE v7.0.0: note the sleep for the credit accounting and restart
+	 * the burst before the entity leaves the tree, so the reweight in
+	 * restart_burst_bore() still sees se->on_rq and can rebalance the
+	 * cfs_rq load.  Mirrors the 6.12 dequeue_task_fair() hook.
+	 */
+	if (task_sleep && entity_is_task(se)) {
+		if (cfs_rq_of(se)->curr == se)
+			update_curr(cfs_rq_of(se));
+		bore_note_sleep(p, rq_clock(rq));
+		restart_burst_bore(p);
+	}
+#endif /* CONFIG_SCHED_BORE */
+
+	for_each_sched_entity(se) {
 		cfs_rq = cfs_rq_of(se);
 		dequeue_entity(cfs_rq, se, flags);
 
@@ -8210,9 +8177,6 @@ static int
 wakeup_preempt_entity(struct sched_entity *curr, struct sched_entity *se)
 {
 	s64 gran, vdiff = curr->vruntime - se->vruntime;
-#ifdef CONFIG_SCHED_BORE
-	if (likely(sched_bore)) vruntime_backstep(&vdiff, curr);
-#endif // CONFIG_SCHED_BORE
 
 	if (vdiff <= 0)
 		return -1;
@@ -8305,6 +8269,19 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
 	update_curr(cfs_rq_of(se));
 	BUG_ON(!pse);
 	if (wakeup_preempt_entity(se, pse) == 1) {
+#ifdef CONFIG_SCHED_BORE
+		/*
+		 * CFS mapping of the EEVDF do_preempt_weight() slice
+		 * protection: a waking task only steals the CPU from the
+		 * current one if it carries strictly more weight.  Level 2
+		 * ("prefer") relaxes that to "at least as much".
+		 */
+		if (static_branch_likely(&sched_burst_protect_slice_cond_key) &&
+		    (static_branch_unlikely(&sched_burst_protect_slice_prefer_key) ?
+		     (pse->load.weight <= se->load.weight) :
+		     (pse->load.weight <  se->load.weight)))
+			return;
+#endif /* CONFIG_SCHED_BORE */
 		/*
 		 * Bias pick_next to pick the sched entity that is
 		 * triggering this preemption.
@@ -8500,8 +8477,8 @@ static void yield_task_fair(struct rq *rq)
 	 */
 	if (unlikely(rq->nr_running == 1)) {
 #ifdef CONFIG_SCHED_BORE
-		restart_burst(se);
-#endif // CONFIG_SCHED_BORE
+		restart_burst_rescale_deadline_bore(curr);
+#endif /* CONFIG_SCHED_BORE */
 		return;
 	}
 
@@ -8514,8 +8491,8 @@ static void yield_task_fair(struct rq *rq)
 		 */
 		update_curr(cfs_rq);
 #ifdef CONFIG_SCHED_BORE
-		restart_burst(se);
-#endif // CONFIG_SCHED_BORE
+		restart_burst_rescale_deadline_bore(curr);
+#endif /* CONFIG_SCHED_BORE */
 		/*
 		 * Tell update_rq_clock() that we've just updated,
 		 * so we don't do microscopic update in schedule()
@@ -12031,6 +12008,14 @@ static void switched_from_fair(struct rq *rq, struct task_struct *p)
 static void switched_to_fair(struct rq *rq, struct task_struct *p)
 {
 	attach_task_cfs_rq(p);
+
+#ifdef CONFIG_SCHED_BORE
+	/*
+	 * BORE v7.0.0: a task entering the fair class starts from a clean
+	 * burst slate (it may arrive from RT/DL with a stale penalty).
+	 */
+	reset_task_bore(p);
+#endif /* CONFIG_SCHED_BORE */
 
 	if (task_on_rq_queued(p)) {
 		/*
