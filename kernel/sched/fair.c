@@ -9049,12 +9049,26 @@ static inline void list_rotate_to_front(struct list_head *entry,
 					struct list_head *head)
 {
 	struct list_head prefix;
+	struct list_head *pos;
 
-	if (list_empty(head) || head->next == entry)
+	if (!entry || list_empty(head) || head->next == entry)
 		return;
 
-	list_cut_position(&prefix, head, entry->prev);
-	list_splice_tail(&prefix, head);
+	/*
+	 * entry must be a live member of head.  If it is not -- a stale or
+	 * foreign node left over from an earlier detach/redo in this heavily
+	 * modified 4.4 tree -- list_cut_position() would splice garbage into
+	 * cfs_tasks and corrupt the runqueue, seen as a bad-pointer Oops in
+	 * load_balance().  Walk head to confirm entry is reachable before
+	 * touching any pointer; bail out (skip the rotation this pass) if not.
+	 */
+	for (pos = head->next; pos != head; pos = pos->next) {
+		if (pos != entry)
+			continue;
+		list_cut_position(&prefix, head, entry->prev);
+		list_splice_tail(&prefix, head);
+		return;
+	}
 }
 
 /*
