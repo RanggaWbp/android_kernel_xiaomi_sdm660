@@ -478,16 +478,16 @@ static void readjust_all_task_weights(void)
 {
 	struct task_struct *task;
 	struct rq *rq;
-	struct rq_flags rf;
+	unsigned long flags;
 
 	read_lock(&tasklist_lock);
 	for_each_process(task) {
 		if (!task_is_bore_eligible(task))
 			continue;
-		rq = task_rq_lock(task, &rf);
+		rq = task_rq_lock(task, &flags);
 		update_rq_clock(rq);
 		reweight_task_by_prio(task, effective_prio_bore(task));
-		task_rq_unlock(rq, task, &rf);
+		task_rq_unlock(rq, task, flags);
 	}
 	read_unlock(&tasklist_lock);
 }
