@@ -9036,40 +9036,6 @@ static bool lb_cost_fits(struct lb_env *env, struct lb_concession *concession,
 	return false;
 }
 
-/*
- * Rotate the block of entries from @entry to the tail of @head around to the
- * front, so @entry becomes the new head.  Relative order inside both blocks
- * is preserved.  No-op when @entry is already the head or the list is empty.
- *
- * 4.4's list.h has no list_rotate_to_front(); this is the same O(1)
- * cut-and-splice upstream performs: split the prefix in front of @entry off
- * into a temporary list, then splice it back at the tail.
- */
-static inline void list_rotate_to_front(struct list_head *entry,
-					struct list_head *head)
-{
-	struct list_head prefix;
-	struct list_head *pos;
-
-	if (!entry || list_empty(head) || head->next == entry)
-		return;
-
-	/*
-	 * entry must be a live member of head.  If it is not -- a stale or
-	 * foreign node left over from an earlier detach/redo in this heavily
-	 * modified 4.4 tree -- list_cut_position() would splice garbage into
-	 * cfs_tasks and corrupt the runqueue, seen as a bad-pointer Oops in
-	 * load_balance().  Walk head to confirm entry is reachable before
-	 * touching any pointer; bail out (skip the rotation this pass) if not.
-	 */
-	for (pos = head->next; pos != head; pos = pos->next) {
-		if (pos != entry)
-			continue;
-		list_cut_position(&prefix, head, entry->prev);
-		list_splice_tail(&prefix, head);
-		return;
-	}
-}
 
 /*
  * detach_tasks() -- tries to detach up to imbalance weighted load from
@@ -9081,8 +9047,7 @@ static int detach_tasks(struct lb_env *env)
 {
 	struct list_head *tasks = &env->src_rq->cfs_tasks;
 	struct lb_concession concession = { NULL, 0 };
-	struct list_head *resume = NULL;
-	struct task_struct *p, *nextp;
+	struct task_struct *p;
 	unsigned long load;
 	int detached = 0;
 	int orig_loop = env->loop;
@@ -9100,32 +9065,24 @@ static int detach_tasks(struct lb_env *env)
 
 redo:
 	/*
-	 * Walk cfs_tasks from the tail towards the head.
-	 *
-	 * @nextp is latched before the body runs because a successful
-	 * detach_task() takes @p off this list.  Only @p is ever removed
-	 * here and the rq lock is held throughout, so @nextp stays valid.
-	 *
-	 * @resume tracks the first task this pass has not examined; it is
-	 * the point a later pass should restart from.
+	 * Walk cfs_tasks from the head.  Rejected tasks are rotated to the
+	 * tail with list_move_tail() at next:, so a later pass resumes where
+	 * this one stopped -- the proven 4.4 scan order.
 	 */
-	for (p = list_last_entry(tasks, struct task_struct, se.group_node);
-	     &p->se.group_node != tasks; p = nextp) {
-		nextp = list_prev_entry(p, se.group_node);
+	while (!list_empty(tasks)) {
+		p = list_first_entry(tasks, struct task_struct, se.group_node);
 
 		/*
 		 * We don't want to steal all, otherwise we may be treated likewise,
 		 * which could at worst lead to a livelock crash.
 		 */
 		if (env->idle != CPU_NOT_IDLE && env->src_rq->nr_running <= 1) {
-			resume = &p->se.group_node;
 			break;
 		}
 
 		env->loop++;
 		/* We've more or less seen every task there is, call it quits */
 		if (env->loop > env->loop_max) {
-			resume = &p->se.group_node;
 			break;
 		}
 
@@ -9133,15 +9090,8 @@ redo:
 		if (env->loop > env->loop_break) {
 			env->loop_break += sched_nr_migrate_break;
 			env->flags |= LBF_NEED_BREAK;
-			resume = &p->se.group_node;
 			break;
 		}
-
-		/*
-		 * From here on @p counts as examined, whatever the outcome:
-		 * a later pass resumes past it rather than looking again.
-		 */
-		resume = &nextp->se.group_node;
 
 		if (!can_migrate_task(p, env))
 			goto next;
@@ -9188,8 +9138,7 @@ redo:
 
 		continue;
 next:
-		if (!sched_feat(LB_ROTATE_BLOCK))
-			list_move_tail(&p->se.group_node, tasks);
+		list_move_tail(&p->se.group_node, tasks);
 	}
 
 	/*
@@ -9201,9 +9150,7 @@ next:
 	 * LBF_MOVED makes it fire at most once per balance operation.  The
 	 * source cannot have been emptied meanwhile: the entry check above
 	 * runs on every call and rejects nr_running <= 1, and no task has
-	 * been detached since.  Done before the rotation below because it
-	 * takes a node off the list that the rotation would otherwise
-	 * anchor on.
+	 * been detached since.
 	 */
 	if (concession.p && !(env->flags & LBF_MOVED)) {
 		detach_task(concession.p, env);
@@ -9213,23 +9160,6 @@ next:
 		env->flags |= LBF_MOVED;
 		detached++;
 	}
-
-	/*
-	 * Advance the scan window as a block.
-	 *
-	 * Making @resume the new tail is the same as making its successor
-	 * the new head, which is what a rotation does.  The surviving
-	 * rejects between @resume and the old tail move to the head
-	 * together, keeping their relative order.
-	 *
-	 * Two cases need no rotation and the guards below cover both: the
-	 * walk reached the head (@resume is the list itself, everything was
-	 * examined), or @resume is already the tail because every examined
-	 * task was detached.
-	 */
-	if (sched_feat(LB_ROTATE_BLOCK) && resume &&
-	    resume != tasks && resume->next != tasks)
-		list_rotate_to_front(resume->next, tasks);
 
 	if (env->flags & (LBF_IGNORE_BIG_TASKS |
 			LBF_IGNORE_PREFERRED_CLUSTER_TASKS) && !detached) {
