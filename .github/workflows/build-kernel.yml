@@ -510,7 +510,7 @@ jobs:
           cat > anykernel.sh << EOF
           ### AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU ${KSU_TAG} (code ${KSU_CODE}) + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE + POC-Selector + REFLEX + ADIOS + NTSYNC + MGLRU + LMK + BBRv3 + LZ4 + DroidSpaces | by RanggaWbp | ${{ env.BUILD_DATE }}
+          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU ${KSU_TAG} (code ${KSU_CODE}) + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE + CAMBYSES + POC-Selector + REFLEX + ADIOS + NTSYNC + MGLRU + LMK + BBRv3 + LZ4 + DroidSpaces | by RanggaWbp | ${{ env.BUILD_DATE }}
           do.devicecheck=1
           do.modules=0
           do.systemless=1
@@ -544,6 +544,7 @@ jobs:
           ui_print " Features enabled:";
           ui_print "   [x] BakaSU ${KSU_TAG} + SUSFS + Re:Kernel + NoMount";
           ui_print "   [x] EAS + BORE scheduler";
+          ui_print "   [x] Cambyses CFS load-balancer tweak";
           ui_print "   [x] POC-Selector  (fast idle CPU pick)";
           ui_print "   [x] Reflex cpufreq governor (default)";
           ui_print "   [x] ADIOS I/O scheduler (default)";
@@ -699,7 +700,10 @@ jobs:
             | **EAS** | Energy-aware scheduling |
             | **DroidSpaces** | LXC/Docker container support (namespaces, cgroups, IPv4/IPv6 NAT) |
             | **BORE** | Burst-Oriented Response Enhancer scheduler |
-            | **ADIOS** | Adaptive Deadline I/O scheduler (`adios`, boot default (`adios`) |
+            | **CAMBYSES** | CFS load-balancer tweak (O(1) block rotate + strict-budget idle picker) |
+            | **POC-Selector** | O(1) idle CPU picker (`kernel.sched_poc_*` static keys, all on) |
+            | **REFLEX** | schedutil-derived cpufreq governor -- boot default |
+            | **ADIOS** | Adaptive Deadline I/O scheduler -- boot default (`adios`) |
             | **POC-Selector** | Piece-Of-Cake O(1) idle CPU picker (`kernel.sched_poc_*` static keys, all on) |
             | **REFLEX** | schedutil-derived cpufreq governor -- boot default |
             | **NTSYNC** | NT sync primitives `/dev/ntsync` (Wine/Proton/emulator) |
