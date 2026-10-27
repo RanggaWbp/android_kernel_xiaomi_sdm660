@@ -82,9 +82,9 @@ static inline int lru_tier_from_refs(int refs)
 }
 
 /* The youngest and the second youngest generations are counted as active. */
-static inline bool lru_gen_is_active(struct lruvec *lruvec, int gen, int type)
+static inline bool lru_gen_is_active(struct lruvec *lruvec, int gen)
 {
-	unsigned long max_seq = lruvec->evictable.max_seq[type];
+	unsigned long max_seq = lruvec->evictable.max_seq;
 
 	VM_BUG_ON(gen >= MAX_NR_GENS);
 
@@ -114,25 +114,25 @@ static inline void lru_gen_update_size(struct page *page, struct lruvec *lruvec,
 			   lrugen->sizes[new_gen][type][zone] + delta);
 
 	if (old_gen < 0) {
-		if (lru_gen_is_active(lruvec, new_gen, type))
+		if (lru_gen_is_active(lruvec, new_gen))
 			lru += LRU_ACTIVE;
 		__update_lru_size(lruvec, lru, zone, delta);
 		return;
 	}
 
 	if (new_gen < 0) {
-		if (lru_gen_is_active(lruvec, old_gen, type))
+		if (lru_gen_is_active(lruvec, old_gen))
 			lru += LRU_ACTIVE;
 		__update_lru_size(lruvec, lru, zone, -delta);
 		return;
 	}
 
-	if (!lru_gen_is_active(lruvec, old_gen, type) && lru_gen_is_active(lruvec, new_gen, type)) {
+	if (!lru_gen_is_active(lruvec, old_gen) && lru_gen_is_active(lruvec, new_gen)) {
 		__update_lru_size(lruvec, lru, zone, -delta);
 		__update_lru_size(lruvec, lru + LRU_ACTIVE, zone, delta);
 	}
 
-	VM_BUG_ON(lru_gen_is_active(lruvec, old_gen, type) && !lru_gen_is_active(lruvec, new_gen, type));
+	VM_BUG_ON(lru_gen_is_active(lruvec, old_gen) && !lru_gen_is_active(lruvec, new_gen));
 }
 
 /* Add a page to one of the multigenerational lru lists. Return true on success. */
@@ -152,7 +152,7 @@ static inline bool lru_gen_add_page(struct page *page, struct lruvec *lruvec, bo
 	 * otherwise.
 	 */
 	if (PageActive(page))
-		gen = lru_gen_from_seq(lrugen->max_seq[type]);
+		gen = lru_gen_from_seq(lrugen->max_seq);
 	else if ((!type && !PageSwapCache(page)) ||
 		 (PageReclaim(page) && (PageDirty(page) || PageWriteback(page))))
 		gen = lru_gen_from_seq(lrugen->min_seq[type] + 1);
@@ -199,7 +199,7 @@ static inline bool lru_gen_del_page(struct page *page, struct lruvec *lruvec, bo
 		/* for shrink_page_list() */
 		if (reclaiming)
 			new_flags &= ~(BIT(PG_referenced) | BIT(PG_reclaim));
-		else if (lru_gen_is_active(lruvec, gen, type))
+		else if (lru_gen_is_active(lruvec, gen))
 			new_flags |= BIT(PG_active);
 	} while (cmpxchg(&page->flags, old_flags, new_flags) != old_flags);
 

@@ -269,14 +269,6 @@ struct mem_cgroup;
  * twice before the eviction would consider it. The first check clears the
  * accessed bit set during the initial fault. The second check makes sure this
  * page hasn't been used since then.
- *
- * BACKPORT: Re-swappiness v1.3 (firelzrd) - the youngest generation number is
- * stored in max_seq[] separately for anon and file types so that they can be
- * aged independently. The oldest generation numbers are stored in min_seq[]
- * separately for anon and file types so that they can be incremented
- * independently. Upstream keeps min_seq[] in sync by force-syncing under
- * try_to_inc_min_seq(); that force-sync is deliberately dropped here so each
- * type ages and evicts on its own timeline.
  */
 #define MIN_NR_GENS		2
 #define MAX_NR_GENS		((unsigned int)CONFIG_NR_LRU_GENS)
@@ -313,12 +305,12 @@ struct mem_cgroup;
 #endif
 
 struct lrugen {
-	/* the aging increments the max generation numbers */
-	unsigned long max_seq[ANON_AND_FILE];
+	/* the aging increments the max generation number */
+	unsigned long max_seq;
 	/* the eviction increments the min generation numbers */
 	unsigned long min_seq[ANON_AND_FILE];
 	/* the birth time of each generation in jiffies */
-	unsigned long timestamps[ANON_AND_FILE][MAX_NR_GENS];
+	unsigned long timestamps[MAX_NR_GENS];
 	/* the multigenerational lru lists */
 	struct list_head lists[MAX_NR_GENS][ANON_AND_FILE][MAX_NR_ZONES];
 	/* the sizes of the multigenerational lru lists in pages */
@@ -353,14 +345,12 @@ enum {
 #define NR_BLOOM_FILTERS	2
 
 struct lru_gen_mm_walk {
-	/* synced with max_seq[] after each round of walk */
-	unsigned long seq[ANON_AND_FILE];
-	/* which type is being aged (LRU_GEN_ANON or LRU_GEN_FILE) */
-	int aging_type;
+	/* set to max_seq after each round of walk */
+	unsigned long seq;
 	/* the next mm_struct on the list to walk */
-	struct list_head *head[ANON_AND_FILE];
+	struct list_head *head;
 	/* the first mm_struct never walked before */
-	struct list_head *tail[ANON_AND_FILE];
+	struct list_head *tail;
 	/* to wait for the last walker to finish */
 	wait_queue_head_t wait;
 	/* bloom filters flip after each round of walk */
@@ -377,8 +367,6 @@ struct lru_gen_mm_walk {
 struct mm_walk_args {
 	struct mem_cgroup *memcg;
 	unsigned long max_seq;
-	/* which type is being aged (LRU_GEN_ANON or LRU_GEN_FILE) */
-	int aging_type;
 	unsigned long start_pfn;
 	unsigned long end_pfn;
 	unsigned long next_addr;
