@@ -418,6 +418,21 @@ const struct sched_group_energy * const cpu_core_energy(int cpu)
 
 const struct cpumask *cpu_coregroup_mask(int cpu)
 {
+	return &cpu_topology[cpu].thread_sibling;
+}
+
+/*
+ * Cluster-wide sibling mask, used as the DIE sched domain span on arm64
+ * big.LITTLE SoCs. See the cpu_cpu_mask override in <asm/topology.h> for why
+ * the generic cpumask_of_node() version breaks EAS here.
+ *
+ * cpu_topology[cpu].core_sibling is filled per cluster_id in
+ * update_siblings_masks(), so for SDM660 it is exactly {cpu0..cpu3} on the
+ * little cluster and {cpu4..cpu7} on the big cluster -- the 4-CPU group that
+ * CLUSTER_COST0 / CLUSTER_COST1 describe.
+ */
+const struct cpumask *cpu_cluster_mask(int cpu)
+{
 	return &cpu_topology[cpu].core_sibling;
 }
 

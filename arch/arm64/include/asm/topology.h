@@ -21,7 +21,30 @@ extern struct cpu_topology cpu_topology[NR_CPUS];
 void init_cpu_topology(void);
 void store_cpu_topology(unsigned int cpuid);
 const struct cpumask *cpu_coregroup_mask(int cpu);
+const struct cpumask *cpu_cluster_mask(int cpu);
 unsigned long arch_get_cpu_efficiency(int cpu);
+
+/*
+ * SDM660 (and every other arm64 big.LITTLE SoC) has no CONFIG_NUMA, so the
+ * generic cpu_cpu_mask() in <linux/topology.h> degrades to
+ * cpumask_of_node(cpu_to_node(cpu)) == cpu_online_mask, i.e. one DIE sched
+ * domain spanning all 8 CPUs across both clusters.
+ *
+ * EAS attaches energy data per sched domain level (init_sched_energy() ->
+ * check_sched_energy_data()), and check_sched_energy_data() BUG_ON()s when two
+ * CPUs inside the same group carry different cap_states. CPU0-3 use
+ * CLUSTER_COST0 while CPU4-7 use CLUSTER_COST1, so a DIE group spanning both
+ * clusters either trips that BUG_ON or makes init_sched_energy() bail out
+ * early -- leaving sd->groups->sge unset, sd_ea NULL, and
+ * select_energy_cpu_brute() returning without ever calling energy_diff().
+ *
+ * Bind the DIE level to the cluster instead: cpu_topology[cpu].core_sibling is
+ * already grouped by cluster_id in update_siblings_masks(), so this yields the
+ * 4-CPU cluster mask that CLUSTER_COST0/CLUSTER_COST1 describe.
+ */
+#ifndef cpu_cpu_mask
+#define cpu_cpu_mask cpu_cluster_mask
+#endif
 
 struct sched_domain;
 #ifdef CONFIG_CPU_FREQ
