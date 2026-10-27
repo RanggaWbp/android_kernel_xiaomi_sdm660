@@ -277,7 +277,10 @@ jobs:
               CONFIG_DEFAULT_ADIOS=y \
               CONFIG_ZRAM_BACKEND_LZ4KDR=y \
               CONFIG_LZ4KDR_COMPRESS=y \
-              CONFIG_LZ4KDR_DECOMPRESS=y ; do
+              CONFIG_LZ4KDR_DECOMPRESS=y \
+              CONFIG_ANON_MIN_RATIO=15 \
+              CONFIG_CLEAN_LOW_RATIO=0 \
+              CONFIG_CLEAN_MIN_RATIO=15 ; do
             grep -q "^${sym%%=*}=" out/.config || echo "$sym" >> out/.config
           done
           make O=out olddefconfig
@@ -389,6 +392,9 @@ jobs:
           check_symbol CONFIG_ZRAM_BACKEND_LZ4KDR y || fail=1
           check_symbol CONFIG_LZ4KDR_COMPRESS y || fail=1
           check_symbol CONFIG_LZ4KDR_DECOMPRESS y || fail=1
+          check_symbol CONFIG_ANON_MIN_RATIO 15 || fail=1
+          check_symbol CONFIG_CLEAN_LOW_RATIO 0 || fail=1
+          check_symbol CONFIG_CLEAN_MIN_RATIO 15 || fail=1
           # LMK kernel driver wajib ada di target build (wayne).
           # lmkd mendeteksi /sys/module/lowmemorykiller/parameters/minfree lalu
           # memakai in-kernel interface, jadi driver ini yang membunuh.
@@ -535,7 +541,7 @@ jobs:
           cat > anykernel.sh << EOF
           ### AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU ${KSU_TAG} (code ${KSU_CODE}) + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE + CAMBYSES + POC-Selector + REFLEX + ADIOS + LZ4KDR + NTSYNC + MGLRU + LMK + BBRv3 + LZ4 + DroidSpaces | by RanggaWbp | ${{ env.BUILD_DATE }}
+          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU ${KSU_TAG} (code ${KSU_CODE}) + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE + CAMBYSES + POC-Selector + REFLEX + ADIOS + LZ4KDR + le9uo + NTSYNC + MGLRU + LMK + BBRv3 + LZ4 + DroidSpaces | by RanggaWbp | ${{ env.BUILD_DATE }}
           do.devicecheck=1
           do.modules=0
           do.systemless=1
@@ -574,6 +580,7 @@ jobs:
           ui_print "   [x] Reflex cpufreq governor (default)";
           ui_print "   [x] ADIOS I/O scheduler (default)";
           ui_print "   [x] LZ4KDR zram codec (selectable; lz4 stays default)";
+          ui_print "   [x] le9uo working-set protection (on by default)";
           ui_print "   [x] MGLRU + LMK + NTSYNC + BBRv3 + LZ4";
           ui_print " ";
           ui_print " - Unpacking boot image ...";
@@ -731,6 +738,7 @@ jobs:
             | **REFLEX** | schedutil-derived cpufreq governor -- boot default |
             | **ADIOS** | Adaptive Deadline I/O scheduler -- boot default (`adios`) |
             | **LZ4KDR** | LZ4KD-derived zram codec, selectable via comp_algorithm (lz4 stays default) |
+            | **le9uo** | Working-set protection: hard/best-effort anon + clean-file reclaim protection (`vm.anon_min_ratio` 15, `vm.clean_min_ratio` 15, `vm.clean_low_ratio` 0; on by default) |
             | **NTSYNC** | NT sync primitives `/dev/ntsync` (Wine/Proton/emulator) |
             | **MGLRU** | Multi-Gen LRU page reclaim (MGLRU v5 backport) |
             | **LMK** | In-kernel low memory killer (`drivers/staging/android/lowmemorykiller.c`, lmkd mode in-kernel: `/sys/module/lowmemorykiller/parameters/minfree`) |

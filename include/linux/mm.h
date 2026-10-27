@@ -89,6 +89,24 @@ extern int mmap_rnd_compat_bits __read_mostly;
 extern unsigned long sysctl_user_reserve_kbytes;
 extern unsigned long sysctl_admin_reserve_kbytes;
 
+/*
+ * le9uo working set protection (backported from le9 v1.15).
+ * The ratio knobs are plain ints, not u8: proc_dointvec_minmax() (4.4 has no
+ * proc_dou8vec_minmax()) reads and writes a whole int, so a u8 .maxlen would
+ * make the sysctl core overrun the variable.  See mm/vmscan.c.
+ */
+extern bool sysctl_workingset_protection;
+extern int sysctl_anon_min_ratio;
+extern int sysctl_clean_low_ratio;
+extern int sysctl_clean_min_ratio;
+/* 4.4's proc_handler typedef takes a non-const `struct ctl_table *`
+ * (const came later), so this prototype must be non-const too -- a const
+ * version here would be a conflicting declaration against the definition
+ * in mm/vmscan.c. */
+int vm_workingset_protection_update_handler(
+		struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos);
+
 extern int sysctl_overcommit_memory;
 extern int sysctl_overcommit_ratio;
 extern unsigned long sysctl_overcommit_kbytes;

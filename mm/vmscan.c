@@ -115,6 +115,24 @@ struct scan_control {
 	unsigned int skipped_deactivate:1;
 	unsigned int memcg_low_reclaim:1;
 
+	/*
+	 * The anonymous pages on the current node are below
+	 * vm.anon_min_ratio (le9uo).
+	 */
+	unsigned int anon_below_min:1;
+
+	/*
+	 * The clean file pages on the current node are below
+	 * vm.clean_low_ratio (le9uo).
+	 */
+	unsigned int clean_below_low:1;
+
+	/*
+	 * The clean file pages on the current node are below
+	 * vm.clean_min_ratio (le9uo).
+	 */
+	unsigned int clean_below_min:1;
+
 	/* Incremented by the number of inactive pages that were scanned */
 	unsigned long nr_scanned;
 
@@ -158,6 +176,25 @@ struct scan_control {
 #else
 #define prefetchw_prev_lru_page(_page, _base, _field) do { } while (0)
 #endif
+
+/*
+ * le9uo working set protection (backported from le9 v1.15).
+ *
+ * The ratio knobs are declared as plain int rather than u8 because 4.4 has
+ * no proc_dou8vec_minmax(); the sysctl core uses proc_dointvec_minmax(),
+ * which reads and writes a full int through the table's .data pointer.  A
+ * u8 variable with .maxlen == sizeof(int) would let the sysctl core overrun
+ * the variable.  See vm_workingset_protection_update_handler() below and the
+ * ctl_table entries in mm/util.c.
+ */
+bool sysctl_workingset_protection __read_mostly = true;
+int sysctl_anon_min_ratio  __read_mostly = CONFIG_ANON_MIN_RATIO;
+int sysctl_clean_low_ratio __read_mostly = CONFIG_CLEAN_LOW_RATIO;
+int sysctl_clean_min_ratio __read_mostly = CONFIG_CLEAN_MIN_RATIO;
+static unsigned long sysctl_anon_min_ratio_kb  __read_mostly = 0;
+static unsigned long sysctl_clean_low_ratio_kb __read_mostly = 0;
+static unsigned long sysctl_clean_min_ratio_kb __read_mostly = 0;
+static unsigned long workingset_protection_prev_totalram __read_mostly = 0;
 
 /*
  * From 0 .. 100.  Higher means more swappy.
@@ -1017,6 +1054,15 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			goto cull_mlocked;
 
 		if (!sc->may_unmap && page_mapped(page))
+			goto keep_locked;
+
+		/*
+		 * Hard protection of the working set (le9uo): keep the page
+		 * on the LRU when its type is below its own watermark.
+		 * 4.4 has no folio_is_file_lru(), use page_is_file_cache().
+		 */
+		if (page_is_file_cache(page) ? sc->clean_below_min :
+				(sc->anon_below_min && !sc->clean_below_min))
 			goto keep_locked;
 
 		/* Double the slab pressure for mapped and swapcache pages */
@@ -2223,6 +2269,15 @@ static void get_scan_count(struct lruvec *lruvec, int swappiness,
 	}
 
 	/*
+	 * Force-scan anon if clean file pages is under vm.clean_low_ratio
+	 * or vm.clean_min_ratio (le9uo).
+	 */
+	if (sc->clean_below_low || sc->clean_below_min) {
+		scan_balance = SCAN_ANON;
+		goto out;
+	}
+
+	/*
 	 * If there is enough inactive page cache, i.e. if the size of the
 	 * inactive list is greater than that of the active list *and* the
 	 * inactive list actually has some pages to scan on this priority, we
@@ -2331,6 +2386,14 @@ out:
 				BUG();
 			}
 
+			/*
+			 * Hard protection of the working set (le9uo).
+			 * Don't reclaim anon/file pages when the amount is
+			 * below the watermark of the same type.
+			 */
+			if (file ? sc->clean_below_min : sc->anon_below_min)
+				scan = 0;
+
 			*lru_pages += size;
 			nr[lru] = scan;
 
@@ -2340,6 +2403,103 @@ out:
 			 */
 			some_scanned |= !!scan;
 		}
+	}
+}
+
+/*
+ * 4.4 has no proc_dou8vec_minmax(), and the ratio knobs are ints, so use
+ * proc_dointvec_minmax() and just drop the cached totalram afterwards.
+ */
+int vm_workingset_protection_update_handler(struct ctl_table *table,
+		int write, void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (ret || !write)
+		return ret;
+
+	workingset_protection_prev_totalram = 0;
+
+	return 0;
+}
+
+static void prepare_workingset_protection(pg_data_t *pgdat,
+		struct scan_control *sc)
+{
+	unsigned long node_mem_total;
+	struct sysinfo i;
+	unsigned long reclaimable_anon;
+	unsigned long dirty, clean;
+	unsigned long reclaimable_file;
+
+	if (!sysctl_workingset_protection) {
+		sc->anon_below_min = 0;
+		sc->clean_below_low = 0;
+		sc->clean_below_min = 0;
+		return;
+	}
+
+	if (likely(sysctl_anon_min_ratio ||
+	           sysctl_clean_low_ratio ||
+		   sysctl_clean_min_ratio)) {
+#ifdef CONFIG_NUMA
+		si_meminfo_node(&i, pgdat->node_id);
+#else
+		si_meminfo(&i);
+#endif
+		node_mem_total = i.totalram;
+
+		if (unlikely(workingset_protection_prev_totalram != node_mem_total)) {
+			sysctl_anon_min_ratio_kb  =
+				node_mem_total * sysctl_anon_min_ratio  / 100;
+			sysctl_clean_low_ratio_kb =
+				node_mem_total * sysctl_clean_low_ratio / 100;
+			sysctl_clean_min_ratio_kb =
+				node_mem_total * sysctl_clean_min_ratio / 100;
+			workingset_protection_prev_totalram = node_mem_total;
+		}
+	}
+
+	/*
+	 * Check the number of anonymous pages to protect them from
+	 * reclaiming if their amount is below the specified.
+	 */
+	if (sysctl_anon_min_ratio) {
+		reclaimable_anon =
+			node_page_state(pgdat, NR_ACTIVE_ANON) +
+			node_page_state(pgdat, NR_INACTIVE_ANON) +
+			node_page_state(pgdat, NR_ISOLATED_ANON);
+
+		sc->anon_below_min = reclaimable_anon < sysctl_anon_min_ratio_kb;
+	} else {
+		sc->anon_below_min = 0;
+	}
+
+	/*
+	 * Check the number of clean file pages to protect them from
+	 * reclaiming if their amount is below the specified.
+	 */
+	if (sysctl_clean_low_ratio || sysctl_clean_min_ratio) {
+		reclaimable_file =
+			node_page_state(pgdat, NR_ACTIVE_FILE) +
+			node_page_state(pgdat, NR_INACTIVE_FILE) +
+			node_page_state(pgdat, NR_ISOLATED_FILE);
+		dirty = node_page_state(pgdat, NR_FILE_DIRTY);
+		/*
+		 * node_page_state() sum can go out of sync since
+		 * all the values are not read at once.
+		 */
+		if (likely(reclaimable_file > dirty))
+			clean = reclaimable_file - dirty;
+		else
+			clean = 0;
+
+		sc->clean_below_low = clean < sysctl_clean_low_ratio_kb;
+		sc->clean_below_min = clean < sysctl_clean_min_ratio_kb;
+	} else {
+		sc->clean_below_low = 0;
+		sc->clean_below_min = 0;
 	}
 }
 
@@ -2377,6 +2537,15 @@ unsigned long lruvec_lru_size(struct lruvec *lruvec, enum lru_list lru, int zone
 /******************************************************************************
  *                          shorthand helpers
  ******************************************************************************/
+
+/*
+ * Upstream MGLRU names the evictable types via enum lruvec_type.  This 4.4
+ * port works with plain ints instead (0 == anon, 1 == file), matching the
+ * swappiness chain in isolate_pages() and gain[ANON_AND_FILE].  Provide the
+ * upstream names so le9uo's overrides read the same as the original patch.
+ */
+#define LRU_GEN_ANON		0
+#define LRU_GEN_FILE		1
 
 #ifdef CONFIG_MEMCG
 static inline struct mem_cgroup *lruvec_memcg_4_9(struct lruvec *lruvec)
@@ -3709,11 +3878,25 @@ static int get_tier_idx(struct lruvec *lruvec, int type)
 	return tier - 1;
 }
 
-static int get_type_to_scan(struct lruvec *lruvec, int swappiness, int *tier_idx)
+static int get_type_to_scan(struct lruvec *lruvec, struct scan_control *sc,
+		int swappiness, int *tier_idx)
 {
 	int type, tier;
 	struct ctrl_pos sp, pv;
 	int gain[ANON_AND_FILE] = { swappiness, 200 - swappiness };
+
+	/*
+	 * le9uo overrides.  Upstream checks these before MIN_SWAPPINESS;
+	 * this 4.4 port uses the plain 0 / 1 / 200 swappiness chain below
+	 * instead of the MIN_SWAPPINESS / MAX_SWAPPINESS constants, so the
+	 * overrides go in front of that chain unchanged.
+	 */
+	if (sc->clean_below_min)
+		return LRU_GEN_ANON;
+	if (sc->anon_below_min)
+		return LRU_GEN_FILE;
+	if (sc->clean_below_low)
+		return LRU_GEN_ANON;
 
 	/*
 	 * Compare refaulted % between the base tiers of anon and file to
@@ -3754,7 +3937,19 @@ static int isolate_pages(struct lruvec *lruvec, struct scan_control *sc, int swa
 	 * available from the same generation, swappiness 200 is interpreted as
 	 * anon first and swappiness 1 is interpreted as file first.
 	 */
-	if (!swappiness)
+	/*
+	 * le9uo overrides (upstream shrink_one() semantics, adapted to this
+	 * port): when clean file pages are under the hard watermark there is
+	 * nothing worth reclaiming on the file side, so scan anon; when anon
+	 * is under its hard watermark, scan file.
+	 */
+	if (sc->clean_below_min)
+		type = LRU_GEN_ANON;
+	else if (sc->anon_below_min)
+		type = LRU_GEN_FILE;
+	else if (sc->clean_below_low)
+		type = LRU_GEN_ANON;
+	else if (!swappiness)
 		type = 1;
 	else if (min_seq[0] < min_seq[1])
 		type = 0;
@@ -3763,7 +3958,7 @@ static int isolate_pages(struct lruvec *lruvec, struct scan_control *sc, int swa
 	else if (swappiness == 200)
 		type = 0;
 	else
-		type = get_type_to_scan(lruvec, swappiness, &tier);
+		type = get_type_to_scan(lruvec, sc, swappiness, &tier);
 
 	for (i = !swappiness; i < ANON_AND_FILE; i++) {
 		if (tier < 0)
@@ -4657,6 +4852,24 @@ static unsigned long lru_gen_shrink_lruvec(struct lruvec *lruvec,
 
 #endif /* CONFIG_LRU_GEN */
 
+#ifdef CONFIG_LRU_GEN
+/*
+ * 4.4 has no mem_cgroup_below_min()-style per-memcg anon accounting, so
+ * there is nothing meaningful to test here yet.  Be conservative: under hard
+ * file protection always allow anon reclaim as long as swapping is still
+ * possible, which keeps MGLRU from spinning on a memcg it cannot make
+ * progress in.  TODO: refine once the 4.4 memcg anon counters are verified.
+ */
+static bool can_reclaim_anon_pages(struct mem_cgroup *memcg, int nid,
+		struct scan_control *sc)
+{
+	if (!memcg || !sc->may_swap)
+		return false;
+
+	return get_nr_swap_pages() > 0;
+}
+#endif
+
 /*
  * This is a basic per-node page freer.  Used by both kswapd and direct reclaim.
  */
@@ -4682,6 +4895,18 @@ static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 	 * leaving *lru_pages unset would read uninitialised stack here.
 	 */
 	if (lru_gen_enabled()) {
+		/*
+		 * le9uo: shrink_one() runs per memcg in upstream and is the
+		 * only place the working set flags are refreshed on the MGLRU
+		 * path (there is no prepare_scan_control() in 4.4), so do it
+		 * here for every memcg iteration.
+		 */
+		prepare_workingset_protection(pgdat, sc);
+
+		if (sysctl_workingset_protection && sc->clean_below_min &&
+				!can_reclaim_anon_pages(memcg, pgdat->node_id, sc))
+			return;
+
 		*lru_pages = lru_gen_shrink_lruvec(lruvec, sc, memcg);
 		return;
 	}
@@ -4889,6 +5114,13 @@ static bool shrink_node(pg_data_t *pgdat, struct scan_control *sc,
 		};
 		unsigned long node_lru_pages = 0;
 		struct mem_cgroup *memcg;
+
+		/*
+		 * le9uo: 4.4 has no prepare_scan_control(), so refresh the
+		 * working set protection flags once per node per pass, right
+		 * here at the top of the loop body.
+		 */
+		prepare_workingset_protection(pgdat, sc);
 
 		nr_reclaimed = sc->nr_reclaimed;
 		nr_scanned = sc->nr_scanned;

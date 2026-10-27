@@ -11,6 +11,7 @@
 #include <linux/mman.h>
 #include <linux/hugetlb.h>
 #include <linux/vmalloc.h>
+#include <linux/sysctl.h>
 
 #include <asm/sections.h>
 #include <asm/uaccess.h>
@@ -472,3 +473,140 @@ out_mm:
 out:
 	return res;
 }
+
+#ifdef CONFIG_SYSCTL
+/*
+ * le9uo (le9 Unofficial working set protection 1.15) sysctl surface.
+ *
+ * Backport notes for 4.4 -- upstream (6.15) puts these entries in the
+ * util_sysctl_table that already lives here; 4.4 mm/util.c has no sysctl
+ * table at all (vm knobs live in kernel/sysctl.c's vm_table), so the table
+ * is registered separately under the existing "vm" directory.
+ *
+ * Two upstream helpers do not exist in 4.4 and are substituted:
+ *   - SYSCTL_ONE_HUNDRED / SYSCTL_ZERO macros (added to
+ *     include/linux/sysctl.h in 4.11) -> local file-static ints below,
+ *     same convention kernel/sysctl.c uses with its own zero/one_hundred.
+ *   - proc_dou8vec_minmax -> not used here; bounds are enforced through
+ *     extra1/extra2 and vm_workingset_protection_update_handler()
+ *     in mm/vmscan.c owns the actual write handling.
+ *   - proc_dobool -> not present in 4.4 at all (tree-wide grep: 0 hits),
+ *     so the bool knob gets a small int-shadow wrapper below.
+ */
+static int zero;
+static int one_hundred = 100;
+
+/*
+ * Declared in include/linux/mm.h by the same backport. Repeated here
+ * deliberately: identical extern re-declarations are legal C and this keeps
+ * mm/util.c compiling on its own if mm.h is patched separately.
+ *
+ * NOTE: the three ratio knobs are `int`, not `u8`, on purpose. 4.4 has no
+ * proc_dou8vec_minmax(); vm_workingset_protection_update_handler() in
+ * mm/vmscan.c goes through proc_dointvec_minmax(), which reads and writes a
+ * whole int through .data. A u8 variable with .maxlen == sizeof(int) would
+ * be overrun by the sysctl core.
+ */
+extern bool sysctl_workingset_protection;
+extern int sysctl_anon_min_ratio;
+extern int sysctl_clean_low_ratio;
+extern int sysctl_clean_min_ratio;
+
+int vm_workingset_protection_update_handler(struct ctl_table *table,
+		int write, void __user *buffer, size_t *lenp, loff_t *ppos);
+
+/*
+ * mm.h declares vm_workingset_protection_update_handler() with a non-const
+ * `struct ctl_table *` to match 4.4's proc_handler typedef, so the
+ * assignments below need no cast.
+ */
+
+/*
+ * 4.4 has no proc_dobool and sysctl_workingset_protection is a one-byte
+ * bool while proc_dointvec() works on int-sized data. Read/write through an
+ * int shadow, then mirror the value back into the bool.
+ */
+static int le9uo_workingset_protection_proc(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	struct ctl_table shadow = *table;
+	int tmp = sysctl_workingset_protection ? 1 : 0;
+	int ret;
+
+	shadow.data = &tmp;
+	shadow.maxlen = sizeof(tmp);
+
+	ret = proc_dointvec(&shadow, write, buffer, lenp, ppos);
+	if (!ret && write)
+		sysctl_workingset_protection = tmp ? true : false;
+
+	return ret;
+}
+
+static struct ctl_table util_sysctl_table[] = {
+	{
+		.procname	= "workingset_protection",
+		.data		= &sysctl_workingset_protection,
+		.maxlen		= sizeof(bool),
+		.mode		= 0644,
+		.proc_handler	= le9uo_workingset_protection_proc,
+	},
+	{
+		.procname	= "anon_min_ratio",
+		.data		= &sysctl_anon_min_ratio,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= vm_workingset_protection_update_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
+	},
+	{
+		.procname	= "clean_low_ratio",
+		.data		= &sysctl_clean_low_ratio,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= vm_workingset_protection_update_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
+	},
+	{
+		.procname	= "clean_min_ratio",
+		.data		= &sysctl_clean_min_ratio,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= vm_workingset_protection_update_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
+	},
+	{ }
+};
+
+/*
+ * 4.4 has NO register_sysctl(path, table): it is declared in
+ * include/linux/sysctl.h but never implemented in kernel/sysctl.c, so
+ * calling it is a link error. The 4.4 way to place a table under an
+ * existing directory is a leading directory entry plus
+ * register_sysctl_table() -- the same pattern kernel/sched/core.c and
+ * kernel/utsname_sysctl.c use. This attaches the le9uo knobs to the
+ * already-existing /proc/sys/vm rather than creating a second "vm".
+ */
+static struct ctl_table vm_le9uo_root_table[] = {
+	{
+		.procname = "vm",
+		.mode = 0555,
+		.child = util_sysctl_table,
+	},
+	{ }
+};
+
+static int __init init_vm_util_sysctls(void)
+{
+	register_sysctl_table(vm_le9uo_root_table);
+	return 0;
+}
+
+/* device_initcall: runs after proc_sys_init()/sysctl_init(), so /proc/sys/vm
+ * already exists and the entries attach to the existing directory.
+ */
+device_initcall(init_vm_util_sysctls);
+#endif /* CONFIG_SYSCTL */
