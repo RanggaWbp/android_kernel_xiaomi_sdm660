@@ -364,7 +364,13 @@ struct lru_gen_mm_walk {
 	/* to wait for the last walker to finish */
 	wait_queue_head_t wait;
 	/* bloom filters flip after each round of walk */
-	unsigned long *filters[NR_BLOOM_FILTERS];
+	/*
+	 * BACKPORT: Re-swappiness v1.3 - one filter pair per type.  With
+	 * independent aging the two types' sequence numbers no longer share
+	 * parity, so a single shared pair would be clobbered by whichever
+	 * type walks second.
+	 */
+	unsigned long *filters[ANON_AND_FILE * NR_BLOOM_FILTERS];
 	/* page table stats for debugging */
 	unsigned long stats[NR_HIST_GENS][NR_MM_STATS];
 	/* the number of concurrent walkers */
