@@ -205,10 +205,19 @@ static inline const struct cpumask *cpu_smt_mask(int cpu)
 }
 #endif
 
+/*
+ * cpu_cpu_mask is defined by the arch when the topology differs from the
+ * generic "one DIE domain per NUMA node" model -- e.g. arm64 big.LITTLE,
+ * where the DIE level must bind to the cluster (see
+ * arch/arm64/include/asm/topology.h). Without this guard the generic
+ * definition below would clash with the arch's declaration.
+ */
+#ifndef cpu_cpu_mask
 static inline const struct cpumask *cpu_cpu_mask(int cpu)
 {
 	return cpumask_of_node(cpu_to_node(cpu));
 }
+#endif
 
 
 #endif /* _LINUX_TOPOLOGY_H */
