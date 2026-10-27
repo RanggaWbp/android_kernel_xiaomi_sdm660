@@ -15,8 +15,14 @@
 #include <linux/sched.h>
 #include <linux/cpu.h>
 #include <linux/crypto.h>
+#ifdef CONFIG_ZRAM_BACKEND_LZ4KDR
+#include <linux/lz4kdr.h>
+#endif
 
 #include "zcomp.h"
+
+/* name of the non-crypto lz4kdr backend, see backends[] below */
+#define ZCOMP_LZ4KDR_NAME "lz4kdr"
 
 static const char * const backends[] = {
 	"lzo",
@@ -35,6 +41,9 @@ static const char * const backends[] = {
 #if IS_ENABLED(CONFIG_CRYPTO_ZSTD)
 	"zstd",
 #endif
+#ifdef CONFIG_ZRAM_BACKEND_LZ4KDR
+	ZCOMP_LZ4KDR_NAME,
+#endif
 	NULL
 };
 
@@ -42,6 +51,9 @@ static void zcomp_strm_free(struct zcomp_strm *zstrm)
 {
 	if (!IS_ERR_OR_NULL(zstrm->tfm))
 		crypto_free_comp(zstrm->tfm);
+#ifdef CONFIG_ZRAM_BACKEND_LZ4KDR
+	kfree(zstrm->lz4kdr_state);
+#endif
 	free_pages((unsigned long)zstrm->buffer, 1);
 	kfree(zstrm);
 }
@@ -56,12 +68,39 @@ static struct zcomp_strm *zcomp_strm_alloc(struct zcomp *comp)
 	if (!zstrm)
 		return NULL;
 
-	zstrm->tfm = crypto_alloc_comp(comp->name, 0, 0);
+	zstrm->tfm = NULL;
+	zstrm->buffer = NULL;
+#ifdef CONFIG_ZRAM_BACKEND_LZ4KDR
+	zstrm->lz4kdr_state = NULL;
+#endif
+
 	/*
 	 * allocate 2 pages. 1 for compressed data, plus 1 extra for the
 	 * case when compressed size is larger than the original one
 	 */
 	zstrm->buffer = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, 1);
+
+#ifdef CONFIG_ZRAM_BACKEND_LZ4KDR
+	if (sysfs_streq(comp->name, ZCOMP_LZ4KDR_NAME)) {
+		/*
+		 * lz4kdr is not a crypto API compressor: instead of a
+		 * crypto tfm it needs a state (hash table) buffer of
+		 * lz4kdr_encode_state_bytes_min() bytes. kzalloc() --
+		 * the zeroing IS the one-time cold-start zero that
+		 * lz4kdr_encode() requires; it does not re-zero the
+		 * state on every call.
+		 */
+		zstrm->lz4kdr_state =
+			kzalloc(lz4kdr_encode_state_bytes_min(), GFP_KERNEL);
+		if (!zstrm->lz4kdr_state || !zstrm->buffer) {
+			zcomp_strm_free(zstrm);
+			return NULL;
+		}
+		return zstrm;
+	}
+#endif
+
+	zstrm->tfm = crypto_alloc_comp(comp->name, 0, 0);
 	if (IS_ERR_OR_NULL(zstrm->tfm) || !zstrm->buffer) {
 		zcomp_strm_free(zstrm);
 		zstrm = NULL;
@@ -132,6 +171,37 @@ void zcomp_stream_put(struct zcomp *comp)
 int zcomp_compress(struct zcomp_strm *zstrm,
 		const void *src, unsigned int *dst_len)
 {
+#ifdef CONFIG_ZRAM_BACKEND_LZ4KDR
+	if (zstrm->lz4kdr_state) {
+		/*
+		 * lz4kdr is a non-crypto backend. out_max is the same
+		 * 2 * PAGE_SIZE dst buffer the crypto path uses, and
+		 * out_limit 0 means "bail out if the result does not
+		 * shrink the input", so a 0 return means the page is
+		 * incompressible -- see below.
+		 */
+		int ret = lz4kdr_encode(zstrm->lz4kdr_state, src,
+				zstrm->buffer, PAGE_SIZE, PAGE_SIZE * 2, 0);
+
+		if (unlikely(ret < 0))
+			return -EINVAL;
+		if (unlikely(ret == 0)) {
+			/*
+			 * LZ4KDR_STATUS_INCOMPRESSIBLE, not an error:
+			 * report a full page so __zram_bvec_write()
+			 * takes its `comp_len >= huge_class_size' path
+			 * and stores the page uncompressed
+			 * (ZRAM_HUGE + raw copy), exactly like a crypto
+			 * compressor whose output is too big to be
+			 * worth storing.
+			 */
+			*dst_len = PAGE_SIZE;
+			return 0;
+		}
+		*dst_len = ret;
+		return 0;
+	}
+#endif
 	/*
 	 * Our dst memory (zstrm->buffer) is always `2 * PAGE_SIZE' sized
 	 * because sometimes we can endup having a bigger compressed data
@@ -157,6 +227,21 @@ int zcomp_decompress(struct zcomp_strm *zstrm,
 		const void *src, unsigned int src_len, void *dst)
 {
 	unsigned int dst_len = PAGE_SIZE;
+
+#ifdef CONFIG_ZRAM_BACKEND_LZ4KDR
+	if (zstrm->lz4kdr_state) {
+		/*
+		 * 4.4 zram treats any non-zero return here as a
+		 * decompression failure (zram_bvec_read() -> bio
+		 * error), so translate lz4kdr's "decoded size"
+		 * success return into 0, and its negative
+		 * lz4kdr_status into -EINVAL.
+		 */
+		if (lz4kdr_decode(src, dst, src_len, PAGE_SIZE) < 0)
+			return -EINVAL;
+		return 0;
+	}
+#endif
 
 	return crypto_comp_decompress(zstrm->tfm,
 			src, src_len,

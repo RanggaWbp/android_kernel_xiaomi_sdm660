@@ -14,6 +14,16 @@ struct zcomp_strm {
 	/* compression/decompression buffer */
 	void *buffer;
 	struct crypto_comp *tfm;
+#ifdef CONFIG_ZRAM_BACKEND_LZ4KDR
+	/*
+	 * lz4kdr hash-table state, used instead of ->tfm when the
+	 * selected compressor is the non-crypto "lz4kdr" backend.
+	 * Must be zeroed once at allocation time -- lz4kdr_encode()
+	 * does not re-zero it on every call, see <linux/lz4kdr.h>.
+	 * NULL for every crypto API compressor.
+	 */
+	void *lz4kdr_state;
+#endif
 };
 
 /* dynamic per-device compression frontend */
