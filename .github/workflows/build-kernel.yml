@@ -499,8 +499,26 @@ jobs:
       # ---------------------------------------------------------------
       - name: Package AnyKernel3 zip
         run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AK3
+          # AnyKernel3 is PINNED on purpose. Its master has no tags, and the
+          # regression in bb45b02cf6 (2026-10-27) broke flashing for every
+          # device: split_boot() was changed from
+          #     case $? in 1) splitfail=1;; 2) touch chromeos;; esac
+          # to
+          #     [ $? == 1 ] && splitfail=1;
+          # A case with no matching arm exits 0, but "[ $? == 1 ]" exits 1
+          # whenever magiskboot's status is not exactly 1 -- including 0
+          # (a SUCCESSFUL unpack). The next line,
+          #     if [ $? != 0 -o "$splitfail" ]; then ... abort
+          # then reads that clobbered $? and aborts with
+          # "! Splitting image failed, aborting".
+          # c072981836 (2026-10-25) is the AK3 that built release 142, which
+          # flashed fine on wayne. Bump this deliberately and test before
+          # trusting a newer upstream AK3.
+          AK3_COMMIT=c072981836
+          git clone https://github.com/osm0sis/AnyKernel3.git AK3
           cd AK3
+          git checkout "$AK3_COMMIT" || { echo "::error::AnyKernel3 pin $AK3_COMMIT tidak bisa di-checkout"; exit 1; }
+          [ "$(git rev-parse HEAD)" = "$(git rev-parse "$AK3_COMMIT")" ] || { echo "::error::AnyKernel3 bukan di pin $AK3_COMMIT"; exit 1; }
           rm -rf ramdisk patch tools/keycheck
           cp ../kernel/out/arch/arm64/boot/Image.gz-dtb .
 
