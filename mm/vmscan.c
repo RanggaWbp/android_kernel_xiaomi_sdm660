@@ -5057,23 +5057,6 @@ static unsigned long lru_gen_shrink_lruvec(struct lruvec *lruvec,
 
 #endif /* CONFIG_LRU_GEN */
 
-#ifdef CONFIG_LRU_GEN
-/*
- * 4.4 has no mem_cgroup_below_min()-style per-memcg anon accounting, so
- * there is nothing meaningful to test here yet.  Be conservative: under hard
- * file protection always allow anon reclaim as long as swapping is still
- * possible, which keeps MGLRU from spinning on a memcg it cannot make
- * progress in.  TODO: refine once the 4.4 memcg anon counters are verified.
- */
-static bool can_reclaim_anon_pages(struct mem_cgroup *memcg, int nid,
-		struct scan_control *sc)
-{
-	if (!memcg || !sc->may_swap)
-		return false;
-
-	return get_nr_swap_pages() > 0;
-}
-#endif
 
 /*
  * This is a basic per-node page freer.  Used by both kswapd and direct reclaim.
@@ -5105,12 +5088,22 @@ static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 		 * only place the working set flags are refreshed on the MGLRU
 		 * path (there is no prepare_scan_control() in 4.4), so do it
 		 * here for every memcg iteration.
+		 *
+		 * The upstream bail-out ("clean file is protected and we cannot
+		 * reclaim anon") is deliberately NOT ported.  Upstream's
+		 * can_reclaim_anon_pages() consults per-memcg anon limits; the
+		 * only 4.4-available proxy is get_nr_swap_pages(), which is 0
+		 * for the whole early boot because zram is not initialised yet.
+		 * Combined with clean_below_min (true for most of boot on a
+		 * 4 GB device) that guard made reclaim return without doing any
+		 * work, so allocations stalled and boot never completed.
+		 *
+		 * Protection itself is per-page (the keep_locked hook in
+		 * shrink_page_list() and the scan=0 / force-scan-anon hooks in
+		 * get_scan_count()), so dropping this guard costs a little
+		 * scanning and cannot livelock.
 		 */
 		prepare_workingset_protection(pgdat, sc);
-
-		if (sysctl_workingset_protection && sc->clean_below_min &&
-				!can_reclaim_anon_pages(memcg, pgdat->node_id, sc))
-			return;
 
 		*lru_pages = lru_gen_shrink_lruvec(lruvec, sc, memcg);
 		return;
