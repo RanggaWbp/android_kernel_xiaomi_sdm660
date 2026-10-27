@@ -3239,7 +3239,11 @@ static int should_skip_vma(unsigned long start, unsigned long end, struct mm_wal
 	if (args->aging_type == LRU_GEN_ANON)
 		return true;
 
-	if (args->swappiness > MAX_SWAPPINESS)
+	/*
+	 * 4.4 has no MAX_SWAPPINESS constant; this tree spells the ceiling
+	 * as a literal 200 (see the swappiness chain in isolate_pages()).
+	 */
+	if (args->swappiness > 200)
 		return true;
 
 	return mapping_unevictable(mapping);
