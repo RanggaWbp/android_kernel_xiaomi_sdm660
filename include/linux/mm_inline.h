@@ -182,7 +182,6 @@ static inline bool lru_gen_del_page(struct page *page, struct lruvec *lruvec, bo
 {
 	int gen;
 	unsigned long old_flags, new_flags;
-	int type = page_is_file_cache(page);
 
 	do {
 		new_flags = old_flags = READ_ONCE(page->flags);
