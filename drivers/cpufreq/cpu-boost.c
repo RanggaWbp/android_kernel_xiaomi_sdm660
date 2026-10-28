@@ -42,7 +42,7 @@ static struct work_struct input_boost_work;
 static struct work_struct powerkey_input_boost_work;
 static bool input_boost_enabled;
 
-static unsigned int input_boost_ms = 100;
+static unsigned int input_boost_ms = 150;
 module_param(input_boost_ms, uint, 0644);
 
 static unsigned int powerkey_input_boost_ms = 400;
@@ -58,7 +58,7 @@ static bool sched_boost_active;
 
 static struct delayed_work input_boost_rem;
 static u64 last_input_time;
-#define MIN_INPUT_INTERVAL (50 * USEC_PER_MSEC)
+#define MIN_INPUT_INTERVAL (30 * USEC_PER_MSEC)
 #define MAX_NAME_LENGTH 64
 
 static int set_input_boost_freq(const char *buf, const struct kernel_param *kp)
@@ -421,9 +421,9 @@ static int cpu_boost_init(void)
 		 * both defconfigs (stock and OC).
 		 */
 		if (cpu < 4)
-			s->input_boost_freq = 1632000;
+			s->input_boost_freq = 1843200;
 		else
-			s->input_boost_freq = 2208000;
+			s->input_boost_freq = 2457600;
 	}
 	input_boost_enabled = true;
 	cpufreq_register_notifier(&boost_adjust_nb, CPUFREQ_POLICY_NOTIFIER);
