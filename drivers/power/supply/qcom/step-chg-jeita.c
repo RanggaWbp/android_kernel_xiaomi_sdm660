@@ -131,8 +131,8 @@ static struct jeita_fcc_cfg jeita_fcc_config = {
 #ifdef CONFIG_MACH_XIAOMI_WAYNE
 		{0,		50,		300000},
 		{51,		150,		900000},
-		{151,		450,		2900000},
-		{451,		600,		1500000},
+		{151,		500,		3400000},
+		{501,		600,		1500000},
 #elif defined(CONFIG_MACH_XIAOMI_LAVENDER)
 		{0,		50,		400000},
 		{51,		150,		1200000},
@@ -181,9 +181,9 @@ static struct jeita_fv_cfg jeita_fv_config = {
 	.fv_cfg		= {
 		/* TEMP_LOW	TEMP_HIGH	FCC */
 #ifdef CONFIG_MACH_LONGCHEER
-		{0,	150,		4400000},
-		{151,	450,		4400000},
-		{451,	600,		4100000},
+		{0,		150,		4400000},
+		{151,		500,		4400000},
+		{501,		600,		4100000},
 #elif defined(CONFIG_MACH_MI)
 		{0,		50,		4400000},
 		{51,		100,		4400000},

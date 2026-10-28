@@ -155,7 +155,7 @@ unsigned int sysctl_sched_cfs_bandwidth_slice = 5000UL;
  * less responsive); lower pushes them to big sooner (the opposite).
  * Read on every wake-up, written only from sysctl, hence __read_mostly.
  */
-__read_mostly unsigned int capacity_margin = 1280;
+__read_mostly unsigned int capacity_margin = 1024;
 
 static inline void update_load_add(struct load_weight *lw, unsigned long inc)
 {
@@ -7640,7 +7640,13 @@ static int start_cpu(bool boosted)
 {
 	struct root_domain *rd = cpu_rq(smp_processor_id())->rd;
 
-	return boosted ? rd->max_cap_orig_cpu : rd->min_cap_orig_cpu;
+	/*
+	 * Bias the placement scan to the big (max-capacity) cluster first so
+	 * wakeups land on the fast cores and only move to the little cluster as
+	 * fallback when the big CPUs are busy. Smoother UI, higher power draw.
+	 */
+	(void) boosted;
+	return rd->max_cap_orig_cpu;
 }
 
 static inline int find_best_target(struct task_struct *p, int *backup_cpu,
