@@ -42,6 +42,20 @@ extern unsigned int sysctl_sched_child_runs_first;
 extern unsigned int sysctl_sched_sync_hint_enable;
 extern unsigned int sysctl_sched_cstate_aware;
 
+/*
+ * Runtime on/off switch for the ENERGY_AWARE scheduling feature.
+ *
+ * sysctl_sched_features is a compile-time constant whenever
+ * CONFIG_SCHED_DEBUG is off, so the usual debugfs sched_features file
+ * cannot toggle it. This separate knob gives the same control through
+ * /proc/sys/kernel/sched_energy_aware, which is what kernel managers
+ * (Franco Kernel Manager et al) can read and write.
+ *
+ * Default 1 = EAS on. Written as 0 it makes energy_aware() false, so the
+ * scheduler falls back to plain wake-up balancing.
+ */
+extern int sysctl_sched_energy_aware;
+
 #ifdef CONFIG_SCHED_HMP
 
 enum freq_reporting_policy {

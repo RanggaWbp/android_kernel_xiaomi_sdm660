@@ -1850,20 +1850,6 @@ static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
 
 extern const_debug unsigned int sysctl_sched_features;
 
-/*
- * Runtime on/off switch for the ENERGY_AWARE scheduling feature.
- *
- * sysctl_sched_features is a compile-time constant whenever
- * CONFIG_SCHED_DEBUG is off, so the usual debugfs sched_features file
- * cannot toggle it. This separate knob gives the same control through
- * /proc/sys/kernel/sched_energy_aware, which is what kernel managers
- * (Franco Kernel Manager et al) can read and write.
- *
- * Default 1 = EAS on. Written as 0 it makes energy_aware() false, so the
- * scheduler falls back to plain wake-up balancing.
- */
-extern int sysctl_sched_energy_aware;
-
 #define SCHED_FEAT(name, enabled)	\
 	__SCHED_FEAT_##name ,
 
