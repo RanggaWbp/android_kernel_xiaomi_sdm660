@@ -42,13 +42,13 @@ static struct work_struct input_boost_work;
 static struct work_struct powerkey_input_boost_work;
 static bool input_boost_enabled;
 
-static unsigned int input_boost_ms = 40;
+static unsigned int input_boost_ms = 100;
 module_param(input_boost_ms, uint, 0644);
 
 static unsigned int powerkey_input_boost_ms = 400;
 module_param(powerkey_input_boost_ms, uint, 0644);
 
-static bool sched_boost_on_input;
+static bool sched_boost_on_input = true;
 module_param(sched_boost_on_input, bool, 0644);
 
 static bool sched_boost_on_powerkey_input = true;
@@ -58,7 +58,7 @@ static bool sched_boost_active;
 
 static struct delayed_work input_boost_rem;
 static u64 last_input_time;
-#define MIN_INPUT_INTERVAL (150 * USEC_PER_MSEC)
+#define MIN_INPUT_INTERVAL (50 * USEC_PER_MSEC)
 #define MAX_NAME_LENGTH 64
 
 static int set_input_boost_freq(const char *buf, const struct kernel_param *kp)
@@ -412,7 +412,20 @@ static int cpu_boost_init(void)
 	for_each_possible_cpu(cpu) {
 		s = &per_cpu(sync_info, cpu);
 		s->cpu = cpu;
+		/*
+		 * Default touch boost frequency per cluster (SDM660: CPU0-3
+		 * little, CPU4-7 big). Used as policy min during the boost
+		 * window so scrolling/touch work runs at a responsive floor.
+		 * cpufreq_verify_within_limits() clamps to the cluster's
+		 * own max if a value exceeds it, so this is safe across
+		 * both defconfigs (stock and OC).
+		 */
+		if (cpu < 4)
+			s->input_boost_freq = 1632000;
+		else
+			s->input_boost_freq = 2208000;
 	}
+	input_boost_enabled = true;
 	cpufreq_register_notifier(&boost_adjust_nb, CPUFREQ_POLICY_NOTIFIER);
 	ret = input_register_handler(&cpuboost_input_handler);
 
