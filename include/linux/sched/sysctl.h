@@ -56,6 +56,15 @@ extern unsigned int sysctl_sched_cstate_aware;
  */
 extern int sysctl_sched_energy_aware;
 
+/*
+ * Headroom EAS keeps before calling a CPU full. See the comment next to
+ * the definition in kernel/sched/fair.c. Exposed as
+ * /proc/sys/kernel/sched_capacity_margin so it can be tuned without a
+ * rebuild -- raising it keeps tasks on the little cluster, lowering it
+ * pushes them to big sooner.
+ */
+extern unsigned int capacity_margin;
+
 #ifdef CONFIG_SCHED_HMP
 
 enum freq_reporting_policy {

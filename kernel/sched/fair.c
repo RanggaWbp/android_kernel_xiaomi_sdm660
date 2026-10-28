@@ -132,8 +132,13 @@ unsigned int sysctl_sched_cfs_bandwidth_slice = 5000UL;
 /*
  * The margin used when comparing utilization with CPU capacity:
  * util * margin < capacity * 1024
+ *
+ * 1024 = task must fit exactly, 1280 = ~25% headroom (default).
+ * Higher keeps tasks on the little cluster longer (more power friendly,
+ * less responsive); lower pushes them to big sooner (the opposite).
+ * Read on every wake-up, written only from sysctl, hence __read_mostly.
  */
-unsigned int capacity_margin = 1280; /* ~20% */
+__read_mostly unsigned int capacity_margin = 1280;
 
 static inline void update_load_add(struct load_weight *lw, unsigned long inc)
 {

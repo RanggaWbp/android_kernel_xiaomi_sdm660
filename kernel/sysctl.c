@@ -135,6 +135,8 @@ static unsigned long zero_ul;
 static unsigned long one_ul = 1;
 static unsigned long long_max = LONG_MAX;
 static int one_hundred = 100;
+static int one_thousand_and_twenty_four = 1024;
+static int two_thousand_and_forty_eight = 2048;
 #ifdef CONFIG_PRINTK
 static int ten_thousand = 10000;
 #endif
@@ -1456,6 +1458,24 @@ static struct ctl_table kern_table[] = {
 		.extra2		= &one,
 	},
 #endif
+	{
+		/*
+		 * Energy Aware Scheduling headroom. 1024 means a task must
+		 * fit exactly, 1280 (default) leaves ~25% spare. Raising it
+		 * keeps tasks on the little cluster longer, lowering it
+		 * pushes them to big sooner. See kernel/sched/fair.c.
+		 *
+		 * Arch independent, unlike sched_energy_aware below which
+		 * only matters on the big.LITTLE arm64 targets.
+		 */
+		.procname	= "sched_capacity_margin",
+		.data		= &capacity_margin,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &one_thousand_and_twenty_four,
+		.extra2		= &two_thousand_and_forty_eight,
+	},
 #if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
 	{
 		.procname	= "boot_reason",
