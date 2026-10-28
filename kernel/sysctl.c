@@ -1464,6 +1464,25 @@ static struct ctl_table kern_table[] = {
 		.mode		= 0444,
 		.proc_handler	= proc_dointvec,
 	},
+	{
+		/*
+		 * Energy Aware Scheduling on/off. Defaults to 1 because
+		 * CONFIG_DEFAULT_USE_ENERGY_AWARE selected the feature at
+		 * build time; sysctl_sched_features is const when
+		 * CONFIG_SCHED_DEBUG is off, so debugfs sched_features
+		 * cannot change it and this is the only runtime control.
+		 *
+		 * Exposed so kernel managers (Franco Kernel Manager et al)
+		 * can show and toggle EAS. See kernel/sched/core.c.
+		 */
+		.procname	= "sched_energy_aware",
+		.data		= &sysctl_sched_energy_aware,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &zero,
+		.extra2		= &one,
+	},
 
 	{
 		.procname	= "cold_boot",

@@ -138,6 +138,14 @@ const_debug unsigned int sysctl_sched_features =
 
 #undef SCHED_FEAT
 
+/*
+ * Runtime switch for ENERGY_AWARE, see the comment next to the extern
+ * declaration in "sched.h". Starts on because
+ * CONFIG_DEFAULT_USE_ENERGY_AWARE already selected the feature at build
+ * time; this only lets userspace turn it back off.
+ */
+int sysctl_sched_energy_aware = 1;
+
 #ifdef CONFIG_SCHED_DEBUG
 #define SCHED_FEAT(name, enabled)	\
 	#name ,
