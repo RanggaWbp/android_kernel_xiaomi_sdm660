@@ -50,7 +50,7 @@ jobs:
       fail-fast: false
       matrix:
         device: [mi6x]
-        profile: [normal, oc_cpu_only]
+        profile: [normal, oc_cpu_latency]
         include:
           # device-specific constants -- dipakai buat AnyKernel3 properties()
           # dan buat validasi appended-DTB.
@@ -67,6 +67,10 @@ jobs:
             defconfig: wayne_defconfig
             device_name2: ""
             is_slot_device: "0"
+          # oc_cpu_latency memakai defconfig latency terpisah (HZ_1000 +
+          # CONFIG_SCHED_LOW_LATENCY) supaya build "normal" tetap murni stock.
+          - profile: oc_cpu_latency
+            defconfig: wayne_latency_defconfig
     env:
       CONF_FILE: configs/${{ matrix.device }}/${{ matrix.profile }}.conf
       # ARTIFACT_NAME TIDAK dihitung dari format string di sini (rawan bug --
@@ -485,9 +489,9 @@ jobs:
           # OC profiles must carry the speedbin override inside the DTB. This is
           # the only place that can prove an "oc" zip actually overclocks:
           # apply_oc_overrides.sh writes qcom,perfcl-force-speedbin=<0> into the
-          # board DTS, and configs/*/oc_cpu_only.conf sets
+          # board DTS, and configs/*/oc_cpu_latency.conf sets
           # CPU_BIG_FORCE_SPEEDBIN=0 (bin0 tops out at 2457.6 MHz).
-          if [[ "$PROFILE" == "oc_cpu_only" ]]; then
+          if [[ "$PROFILE" == "oc_cpu_latency" ]]; then
             ARGS+=(--expect-prop "qcom,perfcl-force-speedbin=0")
           fi
 
@@ -692,14 +696,14 @@ jobs:
           # 2 = 1 device x 2 profile. Gagal keras kalau ada yang hilang, supaya
           # release tidak pernah terbit dengan zip tidak lengkap.
           if [ "$COUNT" -ne 2 ]; then
-            echo "::error::expected 2 zips (mi6x x normal/oc_cpu_only), got ${COUNT}"
+            echo "::error::expected 2 zips (mi6x x normal/oc_cpu_latency), got ${COUNT}"
             exit 1
           fi
 
       - name: Verify every expected zip is present
         run: |
           rc=0
-          for want in kernel-mi6x-normal kernel-mi6x-cpu-only-oc; do
+          for want in kernel-mi6x-normal kernel-mi6x-cpu-latency-oc; do
             if ls zips/${want}-*.zip >/dev/null 2>&1; then
               echo "OK   ${want}"
             else
@@ -755,13 +759,15 @@ jobs:
 
             ## Variants
 
-            | Profile | CPU big cluster | Risk |
-            | :------ | :-------------- | :--- |
-            | `normal` | stock (efuse speed-bin) | none |
-            | `cpu-only-oc` | 2.46 GHz (forced speed-bin 0) | HIGH |
+            | Profile | CPU big cluster | Latency | Risk |
+            | :------ | :-------------- | :------ | :--- |
+            | `normal` | stock (efuse speed-bin) | stock (300Hz, default tunables) | none |
+            | `cpu-latency-oc` | 2.46 GHz (forced speed-bin 0) | 1000Hz tick + halved sched tunables | HIGH |
 
             > The OC profile forces the best-binned LUT onto silicon that may be
-            > binned lower. Keep a boot backup ready.
+            > binned lower. Keep a boot backup ready. The latency profile lowers
+            > scheduler latency (sched_latency/min_granularity/wakeup_granularity)
+            > at a small power/context-switch cost.
 
             ## Flash
 

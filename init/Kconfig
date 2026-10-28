@@ -1379,6 +1379,16 @@ config SCHED_POC_SELECTOR
 
 	  If unsure say Y here.
 
+config SCHED_LOW_LATENCY
+	bool "Low-latency scheduler profile (halved wakeup/runqueue latency)"
+	help
+	  Reduces the CFS tunables (sched_latency, sched_min_granularity,
+	  sched_wakeup_granularity) for a snappier, more responsive UI at
+	  the cost of more context switches and slightly higher power use.
+	  Intended for overclock/gaming kernels; leave off for battery life.
+
+	  If unsure say N here.
+
 config SCHED_TUNE
 	bool "Boosting for CFS tasks (EXPERIMENTAL)"
 	depends on SMP
