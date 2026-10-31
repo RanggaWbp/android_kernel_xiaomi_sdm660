@@ -269,6 +269,7 @@ jobs:
       - name: Build kernel
         working-directory: kernel
         run: |
+          set -o pipefail
           export ARCH=arm64
           export SUBARCH=arm64
           # ZyCromerZ Clang = compiler. GCC eva = binutils (ld/as) yang
@@ -317,7 +318,7 @@ jobs:
           # the active algorithm. ADIOS is the boot-default I/O scheduler
           # (CONFIG_DEFAULT_ADIOS=y); Reflex is the boot-default cpufreq governor
           # (CONFIG_CPU_FREQ_DEFAULT_GOV_REFLEX=y).
-          make O=out -j"$(nproc)" CC="$CLANG" > build.log 2>&1
+          make O=out -j"$(nproc)" CC="$CLANG" 2>&1 | tee build.log
 
       # ---------------------------------------------------------------
       # 7b. CAPTURE BAKASU VERSION -- otomatis dari build, bukan hardcode.
