@@ -22,11 +22,6 @@
 #include <linux/jump_label.h>
 #include <linux/version.h> // We need check kernel version.
 #include <linux/security.h>
-#include <linux/bitmap.h>
-#include <linux/limits.h>
-#include <linux/rcupdate.h>
-#include <linux/string.h>
-#include <linux/vmalloc.h>
 #include <linux/susfs.h>
 #include "fuse/fuse_i.h"
 #include "mount.h"
@@ -46,10 +41,6 @@ DEFINE_STATIC_KEY_TRUE(susfs_is_log_enabled);
 #define SUSFS_LOGE(fmt, ...) 
 #endif
 
-/*
- * kvmalloc() was introduced in v4.12. 4.4 / 4.9 do not have it, but they do
- * have kvfree(), so only kvmalloc() needs a fallback here.
- */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)
 static inline void *susfs_kvmalloc(size_t size, gfp_t flags)
 {
@@ -63,16 +54,6 @@ static inline void *susfs_kvmalloc(size_t size, gfp_t flags)
 	return p;
 }
 #endif
-
-#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
-DEFINE_STATIC_KEY_TRUE(susfs_is_log_enabled);
-#define SUSFS_LOGI(fmt, ...) if (static_branch_likely(&susfs_is_log_enabled)) pr_info("susfs:[%u][%d][%s] " fmt, current_uid().val, current->pid, __func__, ##__VA_ARGS__)
-#define SUSFS_LOGE(fmt, ...) if (static_branch_likely(&susfs_is_log_enabled)) pr_err("susfs:[%u][%d][%s]" fmt, current_uid().val, current->pid, __func__, ##__VA_ARGS__)
-#else
-#define SUSFS_LOGI(fmt, ...) 
-#define SUSFS_LOGE(fmt, ...) 
-#endif
-
 /*
  * Switches the selinux domain of the current process to the KernelSU one, so
  * that the data paths of the apps can be accessed despite of the selinux
@@ -1199,6 +1180,81 @@ int susfs_open_redirect_spoof_do_proc_readlink(struct inode *inode, char *tmp_bu
 			SUSFS_LOGI("spoof path '%s' to '%s'\n",
 					entry->info.target_pathname, entry->info.redirected_pathname);
 			if (strlen(entry->info.redirected_pathname) >= buflen) {
+				SUSFS_LOGE("buflen not big enough\n");
+				srcu_read_unlock(&susfs_srcu_open_redirect, srcu_idx);
+				return -ENAMETOOLONG;
+			}
+			strscpy(tmp_buf, entry->info.redirected_pathname, SUSFS_MAX_LEN_PATHNAME - 1);
+			srcu_read_unlock(&susfs_srcu_open_redirect, srcu_idx);
+			return 0;
+		}
+	}
+	srcu_read_unlock(&susfs_srcu_open_redirect, srcu_idx);
+	return -ENOENT;
+}
+
+/* callers must hold and release the "susfs_srcu_open_redirect" lock themselves. */
+int susfs_open_redirect_spoof_show_map_vma_srcu(struct inode *inode, unsigned long *out_ino, dev_t *out_dev, char **out_spoofed_name) {
+	struct st_susfs_open_redirect_hlist *entry = NULL;
+
+	if (!out_spoofed_name || *out_spoofed_name != NULL) {
+		SUSFS_LOGE("out_spoofed_name cannot be NULL and *out_spoofed_name has to be NULL\n");
+		return -EINVAL;
+	}
+
+	hash_for_each_possible_rcu(OPEN_REDIRECT_HLIST, entry, node, inode->i_ino) {
+		if (entry->reversed_lookup_only &&
+			entry->target_dev == inode->i_sb->s_dev)
+		{
+			SUSFS_LOGI("spoof maps ino/dev/name for redirected path: '%s'\n",
+					entry->info.target_pathname);
+			*out_ino = entry->redirected_ino;
+			*out_dev = entry->redirected_dev;
+			*out_spoofed_name = entry->info.redirected_pathname;
+			return 0;
+		}
+	}
+	return -EINVAL;
+}
+#endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+
+/* sus_map */
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+void susfs_add_sus_map(void __user **user_info) {
+	struct st_susfs_sus_map info = {0};
+	struct path path;
+	struct inode *inode = NULL;
+
+	if (copy_from_user(&info, (struct st_susfs_sus_map __user*)*user_info, sizeof(info))) {
+		info.err = -EFAULT;
+		goto out_copy_to_user;
+	}
+
+	info.err = kern_path(info.target_pathname, LOOKUP_FOLLOW, &path);
+	if (info.err) {
+		SUSFS_LOGE("failed opening file '%s'\n", info.target_pathname);
+		goto out_copy_to_user;
+	}
+
+	inode = d_backing_inode(path.dentry);
+	if (!inode || !inode->i_mapping) {
+		SUSFS_LOGE("inode || inode->i_mapping is NULL\n");
+		info.err = -ENOENT;
+		goto out_path_put_path;
+	}
+	set_bit(AS_FLAGS_SUS_MAP, &inode->i_state);
+	SUSFS_LOGI("pathname: '%s', is flagged as AS_FLAGS_SUS_MAP\n", info.target_pathname);
+	info.err = 0;
+out_path_put_path:
+	path_put(&path);
+out_copy_to_user:
+	if (copy_to_user(&((struct st_susfs_sus_map __user*)*user_info)->err, &info.err, sizeof(info.err))) {
+		info.err = -EFAULT;
+	}
+	SUSFS_LOGI("CMD_SUSFS_ADD_SUS_MAP -> ret: %d\n", info.err);
+}
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
+
 /* priority uid filter */
 struct susfs_priority_uid_filter_bitmap {
 	struct rcu_head			rcu;
@@ -1573,81 +1629,6 @@ bool susfs_is_priority_uid_filtered(uid_t uid) {
 
 	return false;
 }
-
-				SUSFS_LOGE("buflen not big enough\n");
-				srcu_read_unlock(&susfs_srcu_open_redirect, srcu_idx);
-				return -ENAMETOOLONG;
-			}
-			strscpy(tmp_buf, entry->info.redirected_pathname, SUSFS_MAX_LEN_PATHNAME - 1);
-			srcu_read_unlock(&susfs_srcu_open_redirect, srcu_idx);
-			return 0;
-		}
-	}
-	srcu_read_unlock(&susfs_srcu_open_redirect, srcu_idx);
-	return -ENOENT;
-}
-
-/* callers must hold and release the "susfs_srcu_open_redirect" lock themselves. */
-int susfs_open_redirect_spoof_show_map_vma_srcu(struct inode *inode, unsigned long *out_ino, dev_t *out_dev, char **out_spoofed_name) {
-	struct st_susfs_open_redirect_hlist *entry = NULL;
-
-	if (!out_spoofed_name || *out_spoofed_name != NULL) {
-		SUSFS_LOGE("out_spoofed_name cannot be NULL and *out_spoofed_name has to be NULL\n");
-		return -EINVAL;
-	}
-
-	hash_for_each_possible_rcu(OPEN_REDIRECT_HLIST, entry, node, inode->i_ino) {
-		if (entry->reversed_lookup_only &&
-			entry->target_dev == inode->i_sb->s_dev)
-		{
-			SUSFS_LOGI("spoof maps ino/dev/name for redirected path: '%s'\n",
-					entry->info.target_pathname);
-			*out_ino = entry->redirected_ino;
-			*out_dev = entry->redirected_dev;
-			*out_spoofed_name = entry->info.redirected_pathname;
-			return 0;
-		}
-	}
-	return -EINVAL;
-}
-#endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
-
-/* sus_map */
-#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-void susfs_add_sus_map(void __user **user_info) {
-	struct st_susfs_sus_map info = {0};
-	struct path path;
-	struct inode *inode = NULL;
-
-	if (copy_from_user(&info, (struct st_susfs_sus_map __user*)*user_info, sizeof(info))) {
-		info.err = -EFAULT;
-		goto out_copy_to_user;
-	}
-
-	info.err = kern_path(info.target_pathname, LOOKUP_FOLLOW, &path);
-	if (info.err) {
-		SUSFS_LOGE("failed opening file '%s'\n", info.target_pathname);
-		goto out_copy_to_user;
-	}
-
-	inode = d_backing_inode(path.dentry);
-	if (!inode || !inode->i_mapping) {
-		SUSFS_LOGE("inode || inode->i_mapping is NULL\n");
-		info.err = -ENOENT;
-		goto out_path_put_path;
-	}
-	set_bit(AS_FLAGS_SUS_MAP, &inode->i_state);
-	SUSFS_LOGI("pathname: '%s', is flagged as AS_FLAGS_SUS_MAP\n", info.target_pathname);
-	info.err = 0;
-out_path_put_path:
-	path_put(&path);
-out_copy_to_user:
-	if (copy_to_user(&((struct st_susfs_sus_map __user*)*user_info)->err, &info.err, sizeof(info.err))) {
-		info.err = -EFAULT;
-	}
-	SUSFS_LOGI("CMD_SUSFS_ADD_SUS_MAP -> ret: %d\n", info.err);
-}
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 
 /* susfs avc log spoofing */
 DEFINE_STATIC_KEY_FALSE(susfs_is_avc_log_spoofing_enabled);
