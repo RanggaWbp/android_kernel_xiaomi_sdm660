@@ -19,6 +19,7 @@ on:
       - "patches/**"
       - "scripts/apply_oc_overrides.sh"
       - "scripts/validate_oc_config.sh"
+      - "scripts/**"
       # Kernel source that carries the BakaSU/SUSFS/Re:Kernel/BBG/NoMount
       # integration. Without these, a kernel fix (e.g. the su/stat redirect)
       # would never produce a new flashable release -- that is exactly why the
@@ -158,6 +159,10 @@ jobs:
       - name: Re-enable SUSFS in the KernelSU submodule
         working-directory: kernel
         run: bash scripts/apply_ksu_susfs_unsuspend.sh KernelSU
+
+      - name: Add priority UID filter dispatch to KernelSU submodule
+        working-directory: kernel
+        run: bash scripts/apply_ksu_susfs_priority_uid_filter.sh KernelSU
 
       - name: Free up disk space
         run: |
