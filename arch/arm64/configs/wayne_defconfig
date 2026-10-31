@@ -97,7 +97,11 @@ CONFIG_RANDOMIZE_BASE=y
 CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE=y
 # CONFIG_CORE_DUMP_DEFAULT_ELF_HEADERS is not set
 CONFIG_COMPAT=y
-CONFIG_COMPAT_VDSO=y
+# CONFIG_COMPAT_VDSO is not set
+# kompat: 32-bit vDSO dimatikan karena clang (--target=arm-eabi, bare-metal)
+# tidak menghormati -shared -> output ET_EXEC, vdsomunge tolak. Proses 32-bit
+# tetap jalan via COMPAT biasa, tanpa akselerasi vDSO. Untuk hidupkan lagi perlu
+# binutils arm-linux-gnueabi (AOSP 4.9) + -Wl,-marmelf.
 CONFIG_PM_AUTOSLEEP=y
 CONFIG_PM_WAKELOCKS=y
 CONFIG_PM_WAKELOCKS_LIMIT=0

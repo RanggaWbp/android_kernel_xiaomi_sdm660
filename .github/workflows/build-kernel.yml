@@ -186,10 +186,9 @@ jobs:
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           mkdir -p toolchains
-          # GCC binutils (as/ld) + arm32 compat vDSO as -- tetap wajib walau
-          # pakai Clang, karena ZyCromerZ Clang cuma compiler, bukan binutils.
+          # GCC binutils (as/ld) -- tetap wajib walau pakai Clang, karena
+          # ZyCromerZ Clang cuma compiler, bukan binutils.
           git clone --depth=1 https://github.com/mvaisakh/gcc-arm64.git toolchains/gcc64
-          git clone --depth=1 https://github.com/mvaisakh/gcc-arm.git toolchains/gcc32
           # ZyCromerZ Clang 14.0.6 (kernel 4.4 compatible), pin tepat.
           curl -L -o toolchains/clang.tar.gz \
             https://github.com/ZyCromerZ/Clang/releases/download/14.0.6-20261022-release/Clang-14.0.6-20261022.tar.gz
@@ -206,7 +205,6 @@ jobs:
           rm -f toolchains/clang.tar.gz
           test -x toolchains/clang/bin/clang || { echo "::error::clang missing"; exit 1; }
           test -x toolchains/gcc64/bin/aarch64-elf-ld || { echo "::error::gcc-64 missing"; exit 1; }
-          test -x toolchains/gcc32/bin/arm-eabi-ld || { echo "::error::gcc-32 missing"; exit 1; }
 
       # ---------------------------------------------------------------
       # 5. APPLY PATCH -- hanya untuk profile yang benar-benar butuh
@@ -274,10 +272,9 @@ jobs:
           export SUBARCH=arm64
           # ZyCromerZ Clang = compiler. GCC eva = binutils (ld/as) yang
           # dibutuh 4.4 (-no-integrated-as) + arm32 vdso as.
-          export PATH="$GITHUB_WORKSPACE/toolchains/gcc64/bin:$GITHUB_WORKSPACE/toolchains/gcc32/bin:$PATH"
+          export PATH="$GITHUB_WORKSPACE/toolchains/gcc64/bin:$PATH"
           export CLANG_TRIPLE=aarch64-linux-gnu-
           export CROSS_COMPILE="$GITHUB_WORKSPACE/toolchains/gcc64/bin/aarch64-elf-"
-          export CROSS_COMPILE_ARM32="$GITHUB_WORKSPACE/toolchains/gcc32/bin/arm-eabi-"
           export CLANG="$GITHUB_WORKSPACE/toolchains/clang/bin/clang"
           make O=out CC="$CLANG" ${{ matrix.defconfig }}
 
