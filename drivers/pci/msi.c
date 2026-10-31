@@ -748,9 +748,6 @@ static int msix_capability_init(struct pci_dev *dev,
 
 	ret = msix_setup_entries(dev, base, entries, nvec);
 	if (ret)
-	if (pci_msi_ignore_mask)
-		return;
-
 		return ret;
 
 	ret = pci_msi_setup_msi_irqs(dev, nvec, PCI_CAP_ID_MSIX);
