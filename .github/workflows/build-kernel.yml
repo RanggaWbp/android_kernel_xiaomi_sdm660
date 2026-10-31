@@ -180,14 +180,33 @@ jobs:
         uses: actions/cache@v4
         with:
           path: toolchains
-          key: eva-gcc-toolchain-v1
+          key: zyc-clang-14.0.6-20261022+eva-gcc-v1
 
       - name: Download toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           mkdir -p toolchains
+          # GCC binutils (as/ld) + arm32 compat vDSO as -- tetap wajib walau
+          # pakai Clang, karena ZyCromerZ Clang cuma compiler, bukan binutils.
           git clone --depth=1 https://github.com/mvaisakh/gcc-arm64.git toolchains/gcc64
           git clone --depth=1 https://github.com/mvaisakh/gcc-arm.git toolchains/gcc32
+          # ZyCromerZ Clang 14.0.6 (kernel 4.4 compatible), pin tepat.
+          curl -L -o toolchains/clang.tar.gz \
+            https://github.com/ZyCromerZ/Clang/releases/download/14.0.6-20261022-release/Clang-14.0.6-20261022.tar.gz
+          mkdir -p toolchains/clang
+          tar -xzf toolchains/clang.tar.gz -C toolchains/clang
+          # Flatten kalau tarball bungkus folder top-level satu lapis.
+          if [ "$(ls -A toolchains/clang | wc -l)" = "1" ] && [ -d "toolchains/clang/$(ls -A toolchains/clang)" ]; then
+            dir="toolchains/clang/$(ls -A toolchains/clang)"
+            shopt -s dotglob
+            mv "$dir"/* toolchains/clang/
+            shopt -u dotglob
+            rmdir "$dir"
+          fi
+          rm -f toolchains/clang.tar.gz
+          test -x toolchains/clang/bin/clang || { echo "::error::clang missing"; exit 1; }
+          test -x toolchains/gcc64/bin/aarch64-elf-ld || { echo "::error::gcc-64 missing"; exit 1; }
+          test -x toolchains/gcc32/bin/arm-eabi-ld || { echo "::error::gcc-32 missing"; exit 1; }
 
       # ---------------------------------------------------------------
       # 5. APPLY PATCH -- hanya untuk profile yang benar-benar butuh
@@ -252,9 +271,14 @@ jobs:
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
+          # ZyCromerZ Clang = compiler. GCC eva = binutils (ld/as) yang
+          # dibutuh 4.4 (-no-integrated-as) + arm32 vdso as.
+          export PATH="$GITHUB_WORKSPACE/toolchains/gcc64/bin:$GITHUB_WORKSPACE/toolchains/gcc32/bin:$PATH"
+          export CLANG_TRIPLE=aarch64-linux-gnu-
           export CROSS_COMPILE="$GITHUB_WORKSPACE/toolchains/gcc64/bin/aarch64-elf-"
           export CROSS_COMPILE_ARM32="$GITHUB_WORKSPACE/toolchains/gcc32/bin/arm-eabi-"
-          make O=out ${{ matrix.defconfig }}
+          export CLANG="$GITHUB_WORKSPACE/toolchains/clang/bin/clang"
+          make O=out CC="$CLANG" ${{ matrix.defconfig }}
 
           # ---------------------------------------------------------------
           # Force the backported features into .config.
@@ -287,13 +311,13 @@ jobs:
               CONFIG_CLEAN_MIN_RATIO=15 ; do
             grep -q "^${sym%%=*}=" out/.config || echo "$sym" >> out/.config
           done
-          make O=out olddefconfig
+          make O=out olddefconfig CC="$CLANG"
 
           # BBR3 is a choice entry: selecting DEFAULT_BBR3 is what makes it
           # the active algorithm. ADIOS is the boot-default I/O scheduler
           # (CONFIG_DEFAULT_ADIOS=y); Reflex is the boot-default cpufreq governor
           # (CONFIG_CPU_FREQ_DEFAULT_GOV_REFLEX=y).
-          make O=out -j"$(nproc)" 2>&1 | tee build.log
+          make O=out -j"$(nproc)" CC="$CLANG" > build.log 2>&1
 
       # ---------------------------------------------------------------
       # 7b. CAPTURE BAKASU VERSION -- otomatis dari build, bukan hardcode.
