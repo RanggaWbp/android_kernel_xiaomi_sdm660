@@ -1861,6 +1861,13 @@ static void dm_dispatch_clone_request(struct request *clone, struct request *rq)
 		dm_complete_request(rq, r);
 }
 
+void dm_dispatch_request(struct request *rq)
+{
+	struct dm_rq_target_io *tio = tio_from_request(rq);
+
+	dm_dispatch_clone_request(tio->clone, rq);
+}
+
 static int dm_rq_bio_constructor(struct bio *bio, struct bio *bio_orig,
 				 void *data)
 {
