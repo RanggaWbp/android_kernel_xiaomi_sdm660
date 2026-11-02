@@ -247,6 +247,12 @@ void susfs_show_version(void __user **user_info);
 
 void susfs_start_sdcard_monitor_fn(void);
 
+/* AVD (av_rule_hash / sus_type) */
+int susfs_add_sus_type(const char *secctx, u32 type_value);
+bool susfs_is_sus_type_rcu(u32 type_value);
+int susfs_add_sus_avd_allowed_by_type(u32 s_type, u32 t_type, u32 c_type, u32 orig_avd_allowed);
+void susfs_spoof_avd_allowed_rcu(u32 s_type, u32 t_type, u32 c_type, u32 *avd_allowed);
+
 /* susfs_init */
 void susfs_init(void);
 
