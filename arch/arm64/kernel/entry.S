@@ -558,6 +558,7 @@ el1_irq:
 #ifdef CONFIG_PREEMPT
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 	ldr	w24, [tsk, #TSK_TI_PREEMPT]	// get preempt count
+	cbnz	w24, 2f			// preempt count != 0
 #else
 	ldr	w24, [tsk, #TI_PREEMPT]		// get preempt count
 	cbnz	w24, 2f			// preempt count != 0
