@@ -1058,6 +1058,9 @@ void hrtimer_start_range_ns(struct hrtimer *timer, ktime_t tim,
 	timer->state &= ~HRTIMER_STATE_PINNED;
 	timer->state |= (!!(mode & HRTIMER_MODE_PINNED)) << HRTIMER_PINNED_SHIFT;
 
+#ifdef CONFIG_MISSED_TIMER_OFFSETS_HIST
+	{
+		ktime_t now = new_base->get_time();
 		if (ktime_to_ns(tim) < ktime_to_ns(now))
 			timer->praecox = now;
 		else

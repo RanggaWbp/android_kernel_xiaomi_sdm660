@@ -492,7 +492,7 @@ static void readjust_all_task_weights(void)
 	read_unlock(&tasklist_lock);
 }
 
-int sched_bore_update_handler(const struct ctl_table *table,
+int sched_bore_update_handler(struct ctl_table *table,
 		int write, void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	int ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
@@ -510,7 +510,7 @@ int sched_bore_update_handler(const struct ctl_table *table,
 	return 0;
 }
 
-int sched_burst_inherit_type_update_handler(const struct ctl_table *table,
+int sched_burst_inherit_type_update_handler(struct ctl_table *table,
 		int write, void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	int ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
@@ -523,7 +523,7 @@ int sched_burst_inherit_type_update_handler(const struct ctl_table *table,
 	return 0;
 }
 
-int sched_burst_protect_slice_lv_update_handler(const struct ctl_table *table,
+int sched_burst_protect_slice_lv_update_handler(struct ctl_table *table,
 		int write, void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	int ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
@@ -545,7 +545,7 @@ int sched_burst_protect_slice_lv_update_handler(const struct ctl_table *table,
 	return 0;
 }
 
-int sched_credit_cap_us_update_handler(const struct ctl_table *table,
+int sched_credit_cap_us_update_handler(struct ctl_table *table,
 		int write, void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	int ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);

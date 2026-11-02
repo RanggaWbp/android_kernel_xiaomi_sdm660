@@ -43,13 +43,13 @@ extern void task_fork_bore(struct task_struct *p, struct task_struct *parent,
 extern void sched_init_bore(void);
 extern void reset_task_bore(struct task_struct *p);
 
-extern int  sched_bore_update_handler(const struct ctl_table *table,
+extern int  sched_bore_update_handler(struct ctl_table *table,
 	int write, void __user *buffer, size_t *lenp, loff_t *ppos);
-extern int  sched_burst_inherit_type_update_handler(const struct ctl_table *table,
+extern int  sched_burst_inherit_type_update_handler(struct ctl_table *table,
 	int write, void __user *buffer, size_t *lenp, loff_t *ppos);
-extern int  sched_burst_protect_slice_lv_update_handler(const struct ctl_table *table,
+extern int  sched_burst_protect_slice_lv_update_handler(struct ctl_table *table,
 	int write, void __user *buffer, size_t *lenp, loff_t *ppos);
-extern int  sched_credit_cap_us_update_handler(const struct ctl_table *table,
+extern int  sched_credit_cap_us_update_handler(struct ctl_table *table,
 	int write, void __user *buffer, size_t *lenp, loff_t *ppos);
 
 extern void reweight_entity(
