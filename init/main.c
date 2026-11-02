@@ -617,9 +617,11 @@ asmlinkage __visible void __init start_kernel(void)
 		local_irq_disable();
 	idr_init_cache();
 	rcu_init();
+	pr_info("[BHDBG] after rcu_init\n");
 
 	/* trace_printk() and trace points may be used after this */
 	trace_init();
+	pr_info("[BHDBG] after trace_init\n");
 
 	context_tracking_init();
 	radix_tree_init();
@@ -628,13 +630,21 @@ asmlinkage __visible void __init start_kernel(void)
 	init_IRQ();
 	pr_info("[BHDBG] after init_IRQ\n");
 	tick_init();
+	pr_info("[BHDBG] after tick_init\n");
 	rcu_init_nohz();
+	pr_info("[BHDBG] after rcu_init_nohz\n");
 	init_timers();
+	pr_info("[BHDBG] after init_timers\n");
 	hrtimers_init();
+	pr_info("[BHDBG] after hrtimers_init\n");
 	softirq_init();
+	pr_info("[BHDBG] after softirq_init\n");
 	timekeeping_init();
+	pr_info("[BHDBG] after timekeeping_init\n");
 	time_init();
+	pr_info("[BHDBG] after time_init\n");
 	sched_clock_postinit();
+	pr_info("[BHDBG] after sched_clock_postinit\n");
 	perf_event_init();
 	profile_init();
 	call_function_init();
