@@ -575,6 +575,7 @@ el1_irq:
 	bl	el1_preempt
 2:
 #endif
+#endif
 #ifdef CONFIG_TRACE_IRQFLAGS
 	bl	trace_hardirqs_on
 #endif
