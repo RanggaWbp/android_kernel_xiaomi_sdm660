@@ -32,6 +32,7 @@ on:
       - "ipc/**"
       - "net/**"
       - "include/**"
+      - "init/**"
       - "Makefile"
       - "arch/arm64/**"
       - "arch/arm/**"
