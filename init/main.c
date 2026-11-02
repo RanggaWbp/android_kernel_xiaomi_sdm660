@@ -108,6 +108,14 @@ enum system_states system_state __read_mostly;
 EXPORT_SYMBOL(system_state);
 
 /*
+ * This corresponds to system_state >= SYSTEM_SCHEDULING in the mainline.
+ * On PREEMPT_RT kernels, slab allocator requires this state to check if
+ * the allocation must be run with IRQ enabled or not.
+ */
+bool system_scheduling __read_mostly = false;
+EXPORT_SYMBOL(system_scheduling);
+
+/*
  * Boot command-line arguments
  */
 #define MAX_INIT_ARGS CONFIG_INIT_ENV_ARG_LIMIT
@@ -398,6 +406,10 @@ static noinline void __init_refok rest_init(void)
 	rcu_read_lock();
 	kthreadd_task = find_task_by_pid_ns(pid, &init_pid_ns);
 	rcu_read_unlock();
+
+	/* Corresponds to system_state = SYSTEM_SCHEDULING in the mainline */
+	system_scheduling = true;
+
 	complete(&kthreadd_done);
 
 	/*
@@ -514,15 +526,20 @@ asmlinkage __visible void __init start_kernel(void)
 	smp_setup_processor_id();
 	debug_objects_early_init();
 
+	/*
+	 * Set up the initial canary ASAP:
+	 */
+	boot_init_stack_canary();
+
 	cgroup_init_early();
 
 	local_irq_disable();
 	early_boot_irqs_disabled = true;
 
-/*
- * Interrupts are still disabled. Do necessary setups, then
- * enable them
- */
+	/*
+	 * Interrupts are still disabled. Do necessary setups, then
+	 * enable them.
+	 */
 	boot_cpu_init();
 	page_address_init();
 	pr_notice("%s", linux_banner);
@@ -535,6 +552,7 @@ asmlinkage __visible void __init start_kernel(void)
 	setup_command_line(command_line);
 	setup_nr_cpu_ids();
 	setup_per_cpu_areas();
+	softirq_early_init();
 	smp_prepare_boot_cpu();	/* arch-specific boot-cpu hooks */
 
 	build_all_zonelists(NULL, NULL);

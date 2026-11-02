@@ -481,7 +481,8 @@ out:
  * point where they would still be useful.
  */
 
-struct list_lru workingset_shadow_nodes;
+struct list_lru __workingset_shadow_nodes;
+DEFINE_LOCAL_IRQ_LOCK(workingset_shadow_lock);
 
 static unsigned long count_shadow_nodes(struct shrinker *shrinker,
 					struct shrink_control *sc)
@@ -491,9 +492,9 @@ static unsigned long count_shadow_nodes(struct shrinker *shrinker,
 	unsigned long pages;
 
 	/* list_lru lock nests inside IRQ-safe mapping->tree_lock */
-	local_irq_disable();
-	shadow_nodes = list_lru_shrink_count(&workingset_shadow_nodes, sc);
-	local_irq_enable();
+	local_lock_irq(workingset_shadow_lock);
+	shadow_nodes = list_lru_shrink_count(&__workingset_shadow_nodes, sc);
+	local_unlock_irq(workingset_shadow_lock);
 
 	if (sc->memcg) {
 		pages = mem_cgroup_node_nr_lru_pages(sc->memcg, sc->nid,
@@ -585,9 +586,9 @@ static enum lru_status shadow_lru_isolate(struct list_head *item,
 	spin_unlock(&mapping->tree_lock);
 	ret = LRU_REMOVED_RETRY;
 out:
-	local_irq_enable();
+	local_unlock_irq(workingset_shadow_lock);
 	cond_resched();
-	local_irq_disable();
+	local_lock_irq(workingset_shadow_lock);
 	spin_lock(lru_lock);
 	return ret;
 }
@@ -598,10 +599,10 @@ static unsigned long scan_shadow_nodes(struct shrinker *shrinker,
 	unsigned long ret;
 
 	/* list_lru lock nests inside IRQ-safe mapping->tree_lock */
-	local_irq_disable();
-	ret =  list_lru_shrink_walk(&workingset_shadow_nodes, sc,
+	local_lock_irq(workingset_shadow_lock);
+	ret =  list_lru_shrink_walk(&__workingset_shadow_nodes, sc,
 				    shadow_lru_isolate, NULL);
-	local_irq_enable();
+	local_unlock_irq(workingset_shadow_lock);
 	return ret;
 }
 
@@ -624,6 +625,7 @@ static int __init workingset_init(void)
 	unsigned int max_order;
 	int ret;
 
+
 	BUILD_BUG_ON(BITS_PER_LONG < EVICTION_SHIFT);
 	/*
 	 * Calculate the eviction bucket size to cover the longest
@@ -640,6 +642,7 @@ static int __init workingset_init(void)
 	       timestamp_bits, max_order, bucket_order);
 
 	ret = __list_lru_init(&workingset_shadow_nodes, true, &shadow_nodes_key);
+
 	if (ret)
 		goto err;
 	ret = register_shrinker(&workingset_shadow_shrinker);
@@ -647,7 +650,7 @@ static int __init workingset_init(void)
 		goto err_list_lru;
 	return 0;
 err_list_lru:
-	list_lru_destroy(&workingset_shadow_nodes);
+	list_lru_destroy(&__workingset_shadow_nodes);
 err:
 	return ret;
 }

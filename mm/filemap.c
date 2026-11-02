@@ -144,9 +144,12 @@ static int page_cache_tree_insert(struct address_space *mapping,
 		 * node->private_list is protected by
 		 * mapping->tree_lock.
 		 */
-		if (!list_empty(&node->private_list))
-			list_lru_del(&workingset_shadow_nodes,
+		if (!list_empty(&node->private_list)) {
+			local_lock(workingset_shadow_lock);
+			list_lru_del(&__workingset_shadow_nodes,
 				     &node->private_list);
+			local_unlock(workingset_shadow_lock);
+		}
 	}
 	return 0;
 }
@@ -218,7 +221,9 @@ static void page_cache_tree_delete(struct address_space *mapping,
 	if (!workingset_node_pages(node) &&
 	    list_empty(&node->private_list)) {
 		node->private_data = mapping;
-		list_lru_add(&workingset_shadow_nodes, &node->private_list);
+		local_lock(workingset_shadow_lock);
+		list_lru_add(&__workingset_shadow_nodes, &node->private_list);
+		local_unlock(workingset_shadow_lock);
 	}
 }
 
@@ -1799,15 +1804,16 @@ generic_file_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 	ssize_t retval = 0;
 	loff_t *ppos = &iocb->ki_pos;
 	loff_t pos = *ppos;
+	size_t count = iov_iter_count(iter);
+
+	if (!count)
+		goto out; /* skip atime */
 
 	if (iocb->ki_flags & IOCB_DIRECT) {
 		struct address_space *mapping = file->f_mapping;
 		struct inode *inode = mapping->host;
-		size_t count = iov_iter_count(iter);
 		loff_t size;
 
-		if (!count)
-			goto out; /* skip atime */
 		size = i_size_read(inode);
 		retval = filemap_write_and_wait_range(mapping, pos,
 					pos + count - 1);
@@ -2573,7 +2579,7 @@ ssize_t generic_perform_write(struct file *file,
 		unsigned long offset;	/* Offset into pagecache page */
 		unsigned long bytes;	/* Bytes to write to page */
 		size_t copied;		/* Bytes copied from user */
-		void *fsdata;
+		void *fsdata = NULL;
 
 		offset = (pos & (PAGE_CACHE_SIZE - 1));
 		bytes = min_t(unsigned long, PAGE_CACHE_SIZE - offset,

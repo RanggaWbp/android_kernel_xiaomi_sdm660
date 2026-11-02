@@ -1166,6 +1166,7 @@ static void tg_conf_updated(struct throtl_grp *tg)
 		   tg->bps[READ], tg->bps[WRITE],
 		   tg->iops[READ], tg->iops[WRITE]);
 
+	rcu_read_lock();
 	/*
 	 * Update has_rules[] flags for the updated tg's subtree.  A tg is
 	 * considered to have rules if either the tg itself or any of its
@@ -1175,6 +1176,7 @@ static void tg_conf_updated(struct throtl_grp *tg)
 	 */
 	blkg_for_each_descendant_pre(blkg, pos_css, tg_to_blkg(tg))
 		tg_update_has_rules(blkg_to_tg(blkg));
+	rcu_read_unlock();
 
 	/*
 	 * We're already holding queue_lock and know @tg is valid.  Let's
@@ -1588,6 +1590,7 @@ int blk_throtl_init(struct request_queue *q)
 void blk_throtl_exit(struct request_queue *q)
 {
 	BUG_ON(!q->td);
+	del_timer_sync(&q->td->service_queue.pending_timer);
 	throtl_shutdown_wq(q);
 	blkcg_deactivate_policy(q, &blkcg_policy_throtl);
 	kfree(q->td);

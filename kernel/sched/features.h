@@ -45,11 +45,19 @@ SCHED_FEAT(LB_BIAS, true)
  */
 SCHED_FEAT(NONTASK_CAPACITY, true)
 
+#ifdef CONFIG_PREEMPT_RT_FULL
+SCHED_FEAT(TTWU_QUEUE, false)
+# ifdef CONFIG_PREEMPT_LAZY
+SCHED_FEAT(PREEMPT_LAZY, true)
+# endif
+#else
+
 /*
  * Queue remote wakeups on the target CPU and process them
  * using the scheduler IPI. Reduces rq->lock contention/bounces.
  */
 SCHED_FEAT(TTWU_QUEUE, false)
+#endif
 
 #ifdef HAVE_RT_PUSH_IPI
 /*
@@ -60,8 +68,16 @@ SCHED_FEAT(TTWU_QUEUE, false)
  * rq lock and possibly create a large contention, sending an
  * IPI to that CPU and let that CPU push the RT task to where
  * it should go may be a better scenario.
+ *
+ * This is best for PREEMPT_RT, but for non-RT it can cause issues
+ * when preemption is disabled for long periods of time. Have
+ * it only default enabled for PREEMPT_RT.
  */
+# ifdef CONFIG_PREEMPT_RT
 SCHED_FEAT(RT_PUSH_IPI, true)
+# else
+SCHED_FEAT(RT_PUSH_IPI, false)
+# endif
 #endif
 
 SCHED_FEAT(FORCE_SD_OVERLAP, false)

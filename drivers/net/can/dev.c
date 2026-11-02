@@ -341,6 +341,9 @@ void can_change_state(struct net_device *dev, struct can_frame *cf,
 	can_update_state_error_stats(dev, new_state);
 	priv->state = new_state;
 
+	if (!cf)
+		return;
+
 	if (unlikely(new_state == CAN_STATE_BUS_OFF)) {
 		cf->can_id |= CAN_ERR_BUSOFF;
 		return;
@@ -525,10 +528,10 @@ static void can_restart(struct net_device *dev)
 	}
 	cf->can_id |= CAN_ERR_RESTARTED;
 
-	netif_rx_ni(skb);
-
 	stats->rx_packets++;
 	stats->rx_bytes += cf->can_dlc;
+
+	netif_rx_ni(skb);
 
 restart:
 	netdev_dbg(dev, "restarted\n");
@@ -1054,6 +1057,7 @@ static void can_dellink(struct net_device *dev, struct list_head *head)
 
 static struct rtnl_link_ops can_link_ops __read_mostly = {
 	.kind		= "can",
+	.netns_refund	= true,
 	.maxtype	= IFLA_CAN_MAX,
 	.policy		= can_policy,
 	.setup		= can_setup,
