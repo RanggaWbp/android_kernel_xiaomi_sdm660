@@ -1146,7 +1146,7 @@ static void free_rq_clone(struct request *clone)
  * Must be called without clone's queue lock held,
  * see end_clone_request() for more details.
  */
-static void dm_end_request(struct request *clone, int error)
+void dm_end_request(struct request *clone, int error)
 {
 	int rw = rq_data_dir(clone);
 	struct dm_rq_target_io *tio = clone->end_io_data;
@@ -1344,7 +1344,7 @@ static void dm_complete_request(struct request *rq, int error)
  * Target's rq_end_io() function isn't called.
  * This may be used when the target's map_rq() or clone_and_map_rq() functions fail.
  */
-static void dm_kill_unmapped_request(struct request *rq, int error)
+void dm_kill_unmapped_request(struct request *rq, int error)
 {
 	rq->cmd_flags |= REQ_FAILED;
 	dm_complete_request(rq, error);
@@ -2210,7 +2210,7 @@ static int dm_any_congested(void *congested_data, int bdi_bits)
 			 * the query about congestion status of request_queue
 			 */
 			if (dm_request_based(md))
-				r = md->queue->backing_dev_info.wb.state &
+				r = md->queue->backing_dev_info->wb.state &
 				    bdi_bits;
 			else
 				r = dm_table_any_congested(map, bdi_bits);
@@ -2302,8 +2302,8 @@ static void dm_init_old_md_queue(struct mapped_device *md)
 	/*
 	 * Initialize aspects of queue that aren't relevant for blk-mq
 	 */
-	md->queue->backing_dev_info.congested_data = md;
-	md->queue->backing_dev_info.congested_fn = dm_any_congested;
+	md->queue->backing_dev_info->congested_data = md;
+	md->queue->backing_dev_info->congested_fn = dm_any_congested;
 	blk_queue_bounce_limit(md->queue, BLK_BOUNCE_ANY);
 }
 
