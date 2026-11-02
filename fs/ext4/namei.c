@@ -2166,7 +2166,7 @@ static int ext4_add_entry(handle_t *handle, struct dentry *dentry,
 
 	if (ext4_has_inline_data(dir)) {
 		retval = ext4_try_add_inline_entry(handle, &fname,
-						   dentry, inode);
+						   dir, inode);
 		if (retval < 0)
 			goto out;
 		if (retval == 1) {
