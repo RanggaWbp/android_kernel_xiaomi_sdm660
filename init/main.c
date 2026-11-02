@@ -393,6 +393,8 @@ static noinline void __init_refok rest_init(void)
 {
 	int pid;
 
+	pr_info("[BHDBG] rest_init begin\n");
+
 	rcu_scheduler_starting();
 	smpboot_thread_init();
 	/*
@@ -544,6 +546,7 @@ asmlinkage __visible void __init start_kernel(void)
 	page_address_init();
 	pr_notice("%s", linux_banner);
 	setup_arch(&command_line);
+	pr_info("[BHDBG] after setup_arch\n");
 	/*
 	 * Set up the the initial canary ASAP:
 	 */
@@ -595,6 +598,7 @@ asmlinkage __visible void __init start_kernel(void)
 	sort_main_extable();
 	trap_init();
 	mm_init();
+	pr_info("[BHDBG] after mm_init\n");
 
 	/*
 	 * Set up the scheduler prior starting any interrupts (such as the
@@ -602,6 +606,7 @@ asmlinkage __visible void __init start_kernel(void)
 	 * time - but meanwhile we still have a functioning scheduler.
 	 */
 	sched_init();
+	pr_info("[BHDBG] after sched_init\n");
 	/*
 	 * Disable preemption - early bootup scheduling is extremely
 	 * fragile until we cpu_idle() for the first time.
@@ -621,6 +626,7 @@ asmlinkage __visible void __init start_kernel(void)
 	/* init some links before init_ISA_irqs() */
 	early_irq_init();
 	init_IRQ();
+	pr_info("[BHDBG] after init_IRQ\n");
 	tick_init();
 	rcu_init_nohz();
 	init_timers();
@@ -644,6 +650,7 @@ asmlinkage __visible void __init start_kernel(void)
 	 * this. But we do want output early, in case something goes wrong.
 	 */
 	console_init();
+	pr_info("[BHDBG] after console_init\n");
 	if (panic_later)
 		panic("Too many boot %s vars at `%s'", panic_later,
 		      panic_param);
@@ -1004,6 +1011,7 @@ static int __ref kernel_init(void *unused)
 	numa_default_policy();
 
 	flush_delayed_fput();
+	pr_info("[BHDBG] kernel_init: before init process\n");
 	place_marker("M : Kernel End");
 
 	if (ramdisk_execute_command) {
@@ -1043,6 +1051,7 @@ static noinline void __init kernel_init_freeable(void)
 	 * Wait until kthreadd is all set-up.
 	 */
 	wait_for_completion(&kthreadd_done);
+	pr_info("[BHDBG] kernel_init_freeable: kthreadd_done\n");
 
 	/* Now the scheduler is fully set up and can do blocking allocations */
 	gfp_allowed_mask = __GFP_BITS_MASK;
