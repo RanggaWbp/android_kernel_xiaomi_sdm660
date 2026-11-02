@@ -487,7 +487,7 @@ static void readjust_all_task_weights(void)
 		rq = task_rq_lock(task, &flags);
 		update_rq_clock(rq);
 		reweight_task_by_prio(task, effective_prio_bore(task));
-		task_rq_unlock(rq, task, flags);
+		task_rq_unlock(rq, task, &flags);
 	}
 	read_unlock(&tasklist_lock);
 }
