@@ -12,7 +12,7 @@ name: Build OC Kernel (mi6x)
 # sha256/metadata/log dibuang dari output karena dianggap tidak penting.
 on:
   push:
-    branches: [ master ]
+    branches: [ master, cip-4.4.302-rt63 ]
     paths:
       # Build inputs (profiles, patches, override scripts).
       - "configs/**"
