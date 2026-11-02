@@ -53,11 +53,11 @@ u64 jiffy_to_ktime_ns(u64 *now, u64 *jiffy_ktime_ns)
 	unsigned long seq;
 
 	do {
-		seq = read_seqbegin(&jiffies_lock);
+		seq = read_seqcount_begin(&jiffies_seq);
 		*now = ktime_get_ns();
 		*jiffy_ktime_ns = ktime_to_ns(last_jiffies_update);
 		cur_jiffies = get_jiffies_64();
-	} while (read_seqretry(&jiffies_lock, seq));
+	} while (read_seqcount_retry(&jiffies_seq, seq));
 
 	return cur_jiffies;
 }
