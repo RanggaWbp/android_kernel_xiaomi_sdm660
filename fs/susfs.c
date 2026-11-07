@@ -1,4 +1,5 @@
 #include <linux/version.h>
+#include <linux/kernel.h>
 #include <linux/cred.h>
 #include <linux/fs.h>
 #include <linux/slab.h>
@@ -1383,6 +1384,7 @@ out_copy_to_user:
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 
 /* priority uid filter */
+#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
 struct susfs_priority_uid_filter_bitmap {
 	struct rcu_head			rcu;
 	unsigned long			bits[SUSFS_PRIORITY_UID_FILTER_BITMAP_LEN];
@@ -1432,41 +1434,99 @@ static bool susfs_is_valid_app_name(const char *app_name) {
  * Returns 0 on success, a negative errno on failure.
  */
 static int susfs_resolve_priority_app_uid(const char *app_name, uid_t *uid) {
-	char app_path[512];
-	struct path path;
-	struct kstat st;
-	int len;
-	int ret;
+	struct file *fp;
+	char *buf = NULL;
+	char *line, *tmp, *p;
+	char *pkg_name, *uid_str;
+	size_t size;
+	unsigned long val;
+	int ret = -ENOENT;
 
-	len = scnprintf(app_path, sizeof(app_path), "/data/data/%s", app_name);
-	if (len < 0 || len >= sizeof(app_path)) {
-		SUSFS_LOGE("the app name '%s' is too long\n", app_name);
+	if (!app_name || !*app_name || !uid)
 		return -EINVAL;
-	}
 
-	ret = kern_path(app_path, LOOKUP_FOLLOW, &path);
-	if (ret) {
-		SUSFS_LOGE("failed to look up '%s': %d\n", app_path, ret);
+	if (!susfs_is_valid_app_name(app_name))
+		return -EINVAL;
+
+	fp = filp_open("/data/system/packages.list", O_RDONLY | O_NOATIME, 0);
+	if (IS_ERR(fp)) {
+		ret = PTR_ERR(fp);
+		SUSFS_LOGE("failed to open /data/system/packages.list: %d\n", ret);
 		return ret;
 	}
 
-#if defined(STATX_BASIC_STATS)
-	ret = vfs_getattr(&path, &st, STATX_BASIC_STATS, 0);
-#else
-	ret = vfs_getattr(&path, &st);
-#endif
-	path_put(&path);
-	if (ret) {
-		SUSFS_LOGE("failed to get the attributes of '%s': %d\n", app_path, ret);
-		return ret;
+	size = i_size_read(file_inode(fp));
+	if (size <= 0 || size > (4 * 1024 * 1024)) {
+		filp_close(fp, NULL);
+		return -EFBIG;
 	}
 
-	*uid = from_kuid(&init_user_ns, st.uid);
-	if (*uid < SUSFS_PRIORITY_UID_FILTER_MIN_UID ||
-		*uid > SUSFS_PRIORITY_UID_FILTER_MAX_UID)
-		return -EINVAL;
+	buf = vmalloc(size + 1);
+	if (!buf) {
+		filp_close(fp, NULL);
+		return -ENOMEM;
+	}
+	buf[size] = '\0';
 
-	return 0;
+	/* 4.4 kernel_read(): kernel_read(file, offset, buf, count) */
+	ret = kernel_read(fp, 0, buf, size);
+	filp_close(fp, NULL);
+	if (ret != (int)size) {
+		vfree(buf);
+		return -EIO;
+	}
+
+	line = buf;
+	while (line && *line) {
+		p = strchr(line, '\n');
+		if (p) {
+			*p = '\0';
+			tmp = p + 1;
+		} else {
+			tmp = NULL;
+		}
+
+		/* skip empty lines */
+		if (*line == '\0' || *line == '\r') {
+			line = tmp;
+			continue;
+		}
+
+		/* packages.list format: <package> <uid> <gid> ... */
+		pkg_name = strsep(&line, " 	");
+		if (!pkg_name || *pkg_name == '\0') {
+			line = tmp;
+			continue;
+		}
+
+		uid_str = strsep(&line, " 	");
+		if (!uid_str || *uid_str == '\0') {
+			line = tmp;
+			continue;
+		}
+
+		if (!strcmp(pkg_name, app_name)) {
+			if (kstrtoul(uid_str, 10, &val)) {
+				vfree(buf);
+				return -EINVAL;
+			}
+
+			*uid = (uid_t)val % 100000;
+
+			vfree(buf);
+
+			if (*uid < SUSFS_PRIORITY_UID_FILTER_MIN_UID ||
+			    *uid > SUSFS_PRIORITY_UID_FILTER_MAX_UID)
+				return -EINVAL;
+
+			return 0;
+		}
+
+		line = tmp;
+	}
+
+	vfree(buf);
+	return -ENOENT;
 }
 
 /*
@@ -1594,7 +1654,7 @@ void susfs_set_priority_uid_filter(void __user **user_info) {
 
 	if (is_uid_filter_set_before)
 		SUSFS_LOGI("renewing the priority uid filter\n");
-	err = susfs_parse_priority_app_names(info->app_strings, new_bitmap->bits, false);
+	err = susfs_parse_priority_app_names(info->app_strings, new_bitmap->bits, true);
 
 	susfs_restore_creds(orig_cred);
 	orig_cred = NULL;
@@ -1756,6 +1816,7 @@ bool susfs_is_priority_uid_filtered(uid_t uid) {
 
 	return false;
 }
+#endif // #ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
 
 /* susfs avc log spoofing */
 DEFINE_STATIC_KEY_FALSE(susfs_is_avc_log_spoofing_enabled);
@@ -1859,6 +1920,11 @@ void susfs_get_enabled_features(void __user **user_info) {
 	if (info->err) goto out_copy_to_user;
 	buf_ptr = info->enabled_features + copied_size;
 #endif
+#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
+	info->err = copy_config_to_buf("CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER\n", buf_ptr, &copied_size, SUSFS_ENABLED_FEATURES_SIZE);
+	if (info->err) goto out_copy_to_user;
+	buf_ptr = info->enabled_features + copied_size;
+#endif // #ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
 
 	info->err = 0;
 out_copy_to_user:
