@@ -1384,7 +1384,7 @@ out_copy_to_user:
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 
 /* priority uid filter */
-#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
+#ifdef CONFIG_KSU_SUSFS
 struct susfs_priority_uid_filter_bitmap {
 	struct rcu_head			rcu;
 	unsigned long			bits[SUSFS_PRIORITY_UID_FILTER_BITMAP_LEN];
@@ -1816,7 +1816,7 @@ bool susfs_is_priority_uid_filtered(uid_t uid) {
 
 	return false;
 }
-#endif // #ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 /* susfs avc log spoofing */
 DEFINE_STATIC_KEY_FALSE(susfs_is_avc_log_spoofing_enabled);
@@ -1920,11 +1920,11 @@ void susfs_get_enabled_features(void __user **user_info) {
 	if (info->err) goto out_copy_to_user;
 	buf_ptr = info->enabled_features + copied_size;
 #endif
-#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
-	info->err = copy_config_to_buf("CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER\n", buf_ptr, &copied_size, SUSFS_ENABLED_FEATURES_SIZE);
+#ifdef CONFIG_KSU_SUSFS
+	info->err = copy_config_to_buf("CONFIG_KSU_SUSFS\n", buf_ptr, &copied_size, SUSFS_ENABLED_FEATURES_SIZE);
 	if (info->err) goto out_copy_to_user;
 	buf_ptr = info->enabled_features + copied_size;
-#endif // #ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 	info->err = 0;
 out_copy_to_user:

@@ -160,12 +160,12 @@ struct st_susfs_sus_map {
 #endif
 
 /* getpriority uid filter */
-#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
+#ifdef CONFIG_KSU_SUSFS
 struct st_susfs_priority_uid_filter {
 	char                                    app_strings[SUSFS_APP_STR_BUF_SIZE];
 	int                                     err;
 };
-#endif // #ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 /* avc log spoofing */
 struct st_susfs_avc_log_spoofing {
@@ -240,10 +240,10 @@ void susfs_add_sus_map(void __user **user_info);
 void susfs_set_avc_log_spoofing(void __user **user_info);
 
 /* getpriority uid filter */
-#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
+#ifdef CONFIG_KSU_SUSFS
 void susfs_set_priority_uid_filter(void __user **user_info);
 void susfs_parse_priority_app_strings(void);
-#endif // #ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 void susfs_get_enabled_features(void __user **user_info);
 void susfs_show_variant(void __user **user_info);
