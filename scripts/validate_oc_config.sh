@@ -35,13 +35,13 @@ done
 
 # --- 2. Device valid ---
 case "$DEVICE" in
-    mi6x|mia2) ;;
-    *) fail "DEVICE tidak dikenal: '$DEVICE' (harus mi6x atau mia2)" ;;
+    mi6x|mia2|whyred|tulip|lavender) ;;
+    *) fail "DEVICE tidak dikenal: '$DEVICE' (harus mi6x/mia2/whyred/tulip/lavender)" ;;
 esac
 
 case "$CODENAME" in
-    wayne|jasmine_sprout) ;;
-    *) fail "CODENAME tidak dikenal: '$CODENAME'" ;;
+    wayne|jasmine_sprout|whyred|tulip|lavender) ;;
+    *) fail "CODENAME tidak dikenal: '$CODENAME' (harus wayne/jasmine_sprout/whyred/tulip/lavender)" ;;
 esac
 
 # Pastikan device <-> codename tidak tertukar (item 8 brief asli)
@@ -50,6 +50,15 @@ if [[ "$DEVICE" == "mi6x" && "$CODENAME" != "wayne" ]]; then
 fi
 if [[ "$DEVICE" == "mia2" && "$CODENAME" != "jasmine_sprout" ]]; then
     fail "device/codename mismatch: mia2 harus 'jasmine_sprout', dapat '$CODENAME'"
+fi
+if [[ "$DEVICE" == "whyred" && "$CODENAME" != "whyred" ]]; then
+    fail "device/codename mismatch: whyred harus 'whyred', dapat '$CODENAME'"
+fi
+if [[ "$DEVICE" == "tulip" && "$CODENAME" != "tulip" ]]; then
+    fail "device/codename mismatch: tulip harus 'tulip', dapat '$CODENAME'"
+fi
+if [[ "$DEVICE" == "lavender" && "$CODENAME" != "lavender" ]]; then
+    fail "device/codename mismatch: lavender harus 'lavender', dapat '$CODENAME'"
 fi
 
 # --- 3. Profile valid ---

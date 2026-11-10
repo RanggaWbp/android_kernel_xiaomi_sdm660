@@ -51,16 +51,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        device: [mi6x]
-        profile: [normal, oc_cpu_latency]
         include:
           # device-specific constants -- dipakai buat AnyKernel3 properties()
           # dan buat validasi appended-DTB.
           #
           # dtb_model/dtb_board_id: dipakai .github/scripts/verify_appended_dtb.py
           # untuk membuktikan image BENAR-BENAR membawa device tree device ini.
-          #   wayne   : sdm660-mtp-wayne.dts   -> model "...MTP WAYNE", board-id <0x020008 0>
+          #
+          # wayne  : sdm660-mtp-wayne.dts   -> model "...MTP WAYNE", board-id <0x020008 0>
+          # whyred : sdm636-mtp-whyred.dts -> model "...E7S",            board-id <0x30008 0>
+          # tulip  : sdm636-mtp-tulip.dts  -> model "...MTP E7T",     board-id <0x40008 0>
+          # lavender: sdm660-mtp-lavender.dts -> model "...MTP F7A",   board-id <0x20008 0>
           - device: mi6x
+            profile: normal
             codename: wayne
             dtb_basename: sdm660-mtp-wayne
             dtb_model: "WAYNE"
@@ -69,10 +72,41 @@ jobs:
             defconfig: wayne_defconfig
             device_name2: ""
             is_slot_device: "0"
+          - device: mi6x
+            profile: oc_cpu_latency
+            defconfig: wayne_latency_defconfig
           # oc_cpu_latency memakai defconfig latency terpisah (HZ_1000 +
           # CONFIG_SCHED_LOW_LATENCY) supaya build "normal" tetap murni stock.
-          - profile: oc_cpu_latency
-            defconfig: wayne_latency_defconfig
+          - device: whyred
+            profile: normal
+            codename: whyred
+            dtb_basename: sdm636-mtp-whyred
+            dtb_model: "E7S"
+            dtb_board_id: "196616 0"
+            display_name: "Redmi Note 5 / Redmi 5 Plus (whyred)"
+            defconfig: whyred_defconfig
+            device_name2: ""
+            is_slot_device: "0"
+          - device: tulip
+            profile: normal
+            codename: tulip
+            dtb_basename: sdm636-mtp-tulip
+            dtb_model: "MTP E7T"
+            dtb_board_id: "262152 0"
+            display_name: "Redmi Note 6 Pro (tulip)"
+            defconfig: tulip_defconfig
+            device_name2: ""
+            is_slot_device: "0"
+          - device: lavender
+            profile: normal
+            codename: lavender
+            dtb_basename: sdm660-mtp-lavender
+            dtb_model: "MTP F7A"
+            dtb_board_id: "131080 0"
+            display_name: "Redmi Note 7 (lavender)"
+            defconfig: lavender_defconfig
+            device_name2: ""
+            is_slot_device: "0"
     env:
       CONF_FILE: configs/${{ matrix.device }}/${{ matrix.profile }}.conf
       # ARTIFACT_NAME TIDAK dihitung dari format string di sini (rawan bug --
@@ -603,7 +637,7 @@ jobs:
           . tools/ak3-core.sh;
           ui_print " ";
           ui_print "============================================================";
-          ui_print "  RanggaWbp OC Kernel - Xiaomi Mi 6X (wayne)";
+          ui_print "  RanggaWbp OC Kernel - ${{ matrix.display_name }} (${{ matrix.codename }})";
           ui_print "============================================================";
           ui_print "  profile : ${{ matrix.profile }}";
           ui_print "  risk    : ${RISK_LEVEL}";
@@ -728,17 +762,19 @@ jobs:
           ls -la zips
           COUNT=$(ls -1 zips/*.zip 2>/dev/null | wc -l)
           echo "collected ${COUNT} zip(s)"
-          # 2 = 1 device x 2 profile. Gagal keras kalau ada yang hilang, supaya
-          # release tidak pernah terbit dengan zip tidak lengkap.
-          if [ "$COUNT" -ne 2 ]; then
-            echo "::error::expected 2 zips (mi6x x normal/oc_cpu_latency), got ${COUNT}"
+          # 5 = 4 device x profile (mi6x=2, whyred/tulip/lavender=1).
+          # Gagal keras kalau ada yang hilang, supaya release tidak pernah
+          # terbit dengan zip tidak lengkap.
+          if [ "$COUNT" -ne 5 ]; then
+            echo "::error::expected 5 zips (mi6x normal/oc_cpu_latency, whyred, tulip, lavender), got ${COUNT}"
             exit 1
           fi
 
       - name: Verify every expected zip is present
         run: |
           rc=0
-          for want in kernel-mi6x-normal kernel-mi6x-cpu-latency-oc; do
+          for want in kernel-mi6x-normal kernel-mi6x-cpu-latency-oc \
+                      kernel-whyred-normal kernel-tulip-normal kernel-lavender-normal; do
             if ls zips/${want}-*.zip >/dev/null 2>&1; then
               echo "OK   ${want}"
             else
@@ -791,13 +827,17 @@ jobs:
             | Device | Codename | Slot |
             | :----- | :------- | :--- |
             | Xiaomi Mi 6X | `wayne` | A-only |
+            | Xiaomi Redmi Note 5 / Redmi 5 Plus | `whyred` | A-only |
+            | Xiaomi Redmi Note 6 Pro | `tulip` | A-only |
+            | Xiaomi Redmi Note 7 | `lavender` | A-only |
 
             ## Variants
 
-            | Profile | CPU big cluster | Latency | Risk |
-            | :------ | :-------------- | :------ | :--- |
-            | `normal` | stock (efuse speed-bin) | stock (300Hz, default tunables) | none |
-            | `cpu-latency-oc` | 2.46 GHz (forced speed-bin 0) | 1000Hz tick + halved sched tunables | HIGH |
+            | Device | Profile | CPU big cluster | Latency | Risk |
+            | :------ | :------ | :-------------- | :------ | :--- |
+            | wayne | `normal` | stock (efuse speed-bin) | stock (300Hz, default tunables) | none |
+            | wayne | `cpu-latency-oc` | 2.46 GHz (forced speed-bin 0) | 1000Hz tick + halved sched tunables | HIGH |
+            | whyred / tulip / lavender | `normal` | stock (efuse speed-bin) | stock | none |
 
             > The OC profile forces the best-binned LUT onto silicon that may be
             > binned lower. Keep a boot backup ready. The latency profile lowers
