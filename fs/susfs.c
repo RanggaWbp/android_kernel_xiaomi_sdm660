@@ -37,9 +37,13 @@ extern struct vfsmount *susfs_get_non_sus_vfsmnt_from_vfsmnt(struct vfsmount *vf
 DEFINE_STATIC_KEY_TRUE(susfs_is_log_enabled);
 #define SUSFS_LOGI(fmt, ...) if (static_branch_likely(&susfs_is_log_enabled)) pr_info("susfs:[%u][%d][%s] " fmt, current_uid().val, current->pid, __func__, ##__VA_ARGS__)
 #define SUSFS_LOGE(fmt, ...) if (static_branch_likely(&susfs_is_log_enabled)) pr_err("susfs:[%u][%d][%s]" fmt, current_uid().val, current->pid, __func__, ##__VA_ARGS__)
+#define SUSFS_LOGI_RL(fmt, ...) if (static_branch_likely(&susfs_is_log_enabled)) pr_info_ratelimited("susfs:[%u][%d][%s] " fmt, current_uid().val, current->pid, __func__, ##__VA_ARGS__)
+#define SUSFS_LOGE_RL(fmt, ...) if (static_branch_likely(&susfs_is_log_enabled)) pr_err_ratelimited("susfs:[%u][%d][%s]" fmt, current_uid().val, current->pid, __func__, ##__VA_ARGS__)
 #else
 #define SUSFS_LOGI(fmt, ...) 
 #define SUSFS_LOGE(fmt, ...) 
+#define SUSFS_LOGI_RL(fmt, ...) 
+#define SUSFS_LOGE_RL(fmt, ...) 
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)
@@ -131,7 +135,7 @@ int susfs_add_sus_type(const char *secctx, u32 type_value) {
 	}
 
 	hash_add_rcu(SUS_TYPE_HLIST, &new_entry->node, type_value);
-	SUSFS_LOGI("secctx '%s', type '%u', has been added to SUS_TYPE_HLIST\n",
+	SUSFS_LOGI_RL("secctx '%s', type '%u', has been added to SUS_TYPE_HLIST\n",
 					secctx, type_value);
 unlock:
 	mutex_unlock(&susfs_mutex_lock_sus_type);
@@ -208,7 +212,7 @@ int susfs_add_sus_avd_allowed_by_type(u32 s_type, u32 t_type, u32 c_type, u32 or
 
 
 	hash_add_rcu(SUS_AVD_ALLOWED_HLIST, &entry->node, key);
-	SUSFS_LOGI("av_rule '%u %u %u %u' has been added to SUS_AVD_ALLOWED_HLIST\n",
+	SUSFS_LOGI_RL("av_rule '%u %u %u %u' has been added to SUS_AVD_ALLOWED_HLIST\n",
 				s_type, t_type, c_type, orig_avd_allowed);
 unlock:
 	mutex_unlock(&susfs_mutex_lock_sus_avd_allowed_hlist);
@@ -679,7 +683,6 @@ void susfs_update_sus_kstat(void __user **user_info) {
 			memcpy(&new_entry->info, &tmp_entry->info, sizeof(tmp_entry->info));
 			new_entry->info.target_ino = info.target_ino;
 			new_entry->target_ino = info.target_ino;
-			new_entry->target_dev = tmp_entry->target_dev;
 			new_entry->is_fuse = tmp_entry->is_fuse;
 			info.err = susfs_mark_inode_sus_kstat(new_entry->info.target_pathname, new_entry, true);
 			if (info.err) {
@@ -1862,10 +1865,14 @@ void susfs_get_enabled_features(void __user **user_info) {
 	struct st_susfs_enabled_features *info = (struct st_susfs_enabled_features *)kzalloc(sizeof(struct st_susfs_enabled_features), GFP_KERNEL);
 	char *buf_ptr = NULL;
 	size_t copied_size = 0;
+	int err = 0;
 
 	if (!info) {
-		info->err = -ENOMEM;
-		goto out_copy_to_user;
+		err = -ENOMEM;
+		if (copy_to_user(&((struct st_susfs_enabled_features __user*)*user_info)->err, &err, sizeof(err)))
+			err = -EFAULT;
+		SUSFS_LOGI("CMD_SUSFS_SHOW_ENABLED_FEATURES -> ret: %d\n", err);
+		return;
 	}
 
 	if (copy_from_user(info, (struct st_susfs_enabled_features __user*)*user_info, sizeof(struct st_susfs_enabled_features))) {

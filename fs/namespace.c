@@ -793,6 +793,20 @@ struct mount *__lookup_mnt(struct vfsmount *mnt, struct dentry *dentry)
 	struct hlist_head *head = m_hash(mnt, dentry);
 	struct mount *p;
 
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+	// - The hook here is needed as a temp solution to hide sus mnts for zygote_next
+	//   spawned process since it just inherits the init mount namespace, and here
+	//   we also spoof for the zygote spawned processes that are marked umounted,
+	//   with this hack, we do not even need to umount those sus mounts.
+	// - The solution here is simply to return the legit mount.
+	if (susfs_is_current_proc_umounted()) {
+		hlist_for_each_entry_rcu(p, head, mnt_hash)
+			if (p->mnt_id < DEFAULT_KSU_MNT_ID && &p->mnt_parent->mnt == mnt && p->mnt_mountpoint == dentry)
+				return p;
+		return NULL;
+	}
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+
 	hlist_for_each_entry_rcu(p, head, mnt_hash)
 		if (&p->mnt_parent->mnt == mnt && p->mnt_mountpoint == dentry)
 			return p;
