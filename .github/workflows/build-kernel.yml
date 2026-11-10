@@ -305,7 +305,7 @@ jobs:
               CONFIG_DEFAULT_BBR3=y \
               CONFIG_SCHED_POC_SELECTOR=y \
               CONFIG_CPU_FREQ_GOV_REFLEX=y \
-              CONFIG_CPU_FREQ_DEFAULT_GOV_REFLEX=y \
+              CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y \
               CONFIG_DEFAULT_ADIOS=y \
               CONFIG_ZRAM_BACKEND_LZ4KDR=y \
               CONFIG_LZ4KDR_COMPRESS=y \
@@ -319,8 +319,8 @@ jobs:
 
           # BBR3 is a choice entry: selecting DEFAULT_BBR3 is what makes it
           # the active algorithm. ADIOS is the boot-default I/O scheduler
-          # (CONFIG_DEFAULT_ADIOS=y); Reflex is the boot-default cpufreq governor
-          # (CONFIG_CPU_FREQ_DEFAULT_GOV_REFLEX=y).
+          # (CONFIG_DEFAULT_ADIOS=y). Governor: schedutil is boot default;
+          # REFLEX stays available but is NOT the default (stock behavior).
           make O=out -j"$(nproc)" CC="$CLANG" 2>&1 | tee build.log
 
       # ---------------------------------------------------------------
@@ -419,7 +419,7 @@ jobs:
           check_symbol CONFIG_DEFAULT_BBR3 y  || fail=1
           check_symbol CONFIG_SCHED_POC_SELECTOR y || fail=1
           check_symbol CONFIG_CPU_FREQ_GOV_REFLEX y || fail=1
-          check_symbol CONFIG_CPU_FREQ_DEFAULT_GOV_REFLEX y || fail=1
+          check_symbol CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL y || fail=1
           check_symbol CONFIG_DEFAULT_ADIOS y || fail=1
           check_symbol CONFIG_ZRAM_BACKEND_LZ4KDR y || fail=1
           check_symbol CONFIG_LZ4KDR_COMPRESS y || fail=1
@@ -616,7 +616,7 @@ jobs:
           ui_print "[x] EAS + BORE scheduler";
           ui_print "[x] CAMBYSES CFS load-balancer";
           ui_print "[x] POC-Selector (fast idle pick)";
-          ui_print "[x] REFLEX cpufreq governor";
+          ui_print "[x] REFLEX cpufreq governor (selectable, schedutil boot default)";
           ui_print "[x] ADIOS I/O scheduler";
           ui_print "[x] LZ4KDR zram codec";
           ui_print "[x] le9uo working-set protection";
@@ -775,7 +775,7 @@ jobs:
             | **BORE** | Burst-Oriented Response Enhancer scheduler |
             | **CAMBYSES** | CFS load-balancer tweak (O(1) block rotate + strict-budget idle picker) |
             | **POC-Selector** | O(1) idle CPU picker (`kernel.sched_poc_*` static keys, all on) |
-            | **REFLEX** | schedutil-derived cpufreq governor -- boot default |
+            | **REFLEX** | schedutil-derived cpufreq governor (selectable, schedutil boot default) |
             | **ADIOS** | Adaptive Deadline I/O scheduler -- boot default (`adios`) |
             | **LZ4KDR** | LZ4KD-derived zram codec, selectable via comp_algorithm (lz4 stays default) |
             | **le9uo** | Working-set protection: hard/best-effort anon + clean-file reclaim protection (`vm.anon_min_ratio` 15, `vm.clean_min_ratio` 15, `vm.clean_low_ratio` 0; on by default) |
