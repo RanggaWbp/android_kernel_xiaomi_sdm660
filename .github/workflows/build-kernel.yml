@@ -61,7 +61,12 @@ jobs:
           # wayne  : sdm660-mtp-wayne.dts   -> model "...MTP WAYNE", board-id <0x020008 0>
           # whyred : sdm636-mtp-whyred.dts -> model "...E7S",            board-id <0x30008 0>
           # tulip  : sdm636-mtp-tulip.dts  -> model "...MTP E7T",     board-id <0x40008 0>
-          # lavender: sdm660-mtp-lavender.dts -> model "...MTP F7A",   board-id <0x20008 0>
+          # lavender: sdm660-mtp-lavender.dts -> model "...MTP F7A",  board-id <0x20008 0>
+          #
+          # CATATAN: setiap entry include BERDIRI SENDIRI (GitHub Actions TIDAK
+          # merge field antar entry). Semua field wajib diisi penuh per entry --
+          # kalau tidak, dtb_basename/display_name dst jadi kosong dan step
+          # Verify appended DTB gagal (".dtb not found").
           - device: mi6x
             profile: normal
             codename: wayne
@@ -72,11 +77,20 @@ jobs:
             defconfig: wayne_defconfig
             device_name2: ""
             is_slot_device: "0"
-          - device: mi6x
-            profile: oc_cpu_latency
-            defconfig: wayne_latency_defconfig
           # oc_cpu_latency memakai defconfig latency terpisah (HZ_1000 +
           # CONFIG_SCHED_LOW_LATENCY) supaya build "normal" tetap murni stock.
+          # Entry ini WAJIB mengulang semua field device (tidak inherit dari
+          # mi6x/normal).
+          - device: mi6x
+            profile: oc_cpu_latency
+            codename: wayne
+            dtb_basename: sdm660-mtp-wayne
+            dtb_model: "WAYNE"
+            dtb_board_id: "131080 0"
+            display_name: "Mi 6X"
+            defconfig: wayne_latency_defconfig
+            device_name2: ""
+            is_slot_device: "0"
           - device: whyred
             profile: normal
             codename: whyred
