@@ -315,6 +315,12 @@ jobs:
               CONFIG_CLEAN_MIN_RATIO=15 ; do
             grep -q "^${sym%%=*}=" out/.config || echo "$sym" >> out/.config
           done
+
+          # Inject the DroidSpaces fragment (same pattern as the for-loop
+          # above): only append lines whose CONFIG_* key is not already
+          # present, then let olddefconfig resolve dependencies and drop
+          # anything the 4.4 tree doesn't know (e.g. FW_LOADER_COMPRESS).
+          while read -r line; do case "$line" in \#*|'') continue;; esac; sym="${line%%=*}"; grep -q "^${sym}=" out/.config || echo "$line" >> out/.config; done < ../oc-config/configs/droidspaces.config
           make O=out olddefconfig CC="$CLANG"
 
           # BBR3 is a choice entry: selecting DEFAULT_BBR3 is what makes it
@@ -434,6 +440,10 @@ jobs:
           check_symbol CONFIG_ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES y || fail=1
           check_symbol CONFIG_MEMCG y          || fail=1
           check_symbol CONFIG_MEMCG_SWAP y     || fail=1
+          # DroidSpaces: container/namespace support must resolve to y.
+          check_symbol CONFIG_OVERLAY_FS y     || fail=1
+          check_symbol CONFIG_USER_NS y        || fail=1
+          check_symbol CONFIG_VETH y           || fail=1
 
           # Object files: proves the code was really compiled in, not just
           # selected in Kconfig.
