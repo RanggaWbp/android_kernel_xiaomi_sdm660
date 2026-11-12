@@ -34,14 +34,17 @@
 		 * -75" and the device had no pstore, so every panic was
 		 * lost.  Keep them 64-bit.
 		 *
-		 * Layout over the 4 MiB region, in the order
-		 * ramoops_probe() allocates it.  Dumps come first and are
-		 * the one zone ramoops does not zap on probe, so a panic
-		 * record survives the reset and is readable on the next
-		 * boot.
+		 * Zone sizes must match the ones the recovery kernel uses for
+		 * this region: console 2 MiB at offset 0, pmsg 2 MiB after
+		 * it, and no dumps zone (record-size absent).  Recovery maps
+		 * the same physical range and validates every persistent_ram
+		 * zone by its signature, so any other layout leaves
+		 * /sys/fs/pstore empty in recovery -- which is the only
+		 * place a panic can be read back from on this device.  The
+		 * panic output still lands in the console ring, so nothing is
+		 * lost by dropping the dumps zone.
 		 */
-		record-size = <0x0 0x200000>;
-		console-size = <0x0 0x100000>;
-		pmsg-size = <0x0 0x100000>;
+		console-size = <0x0 0x200000>;
+		pmsg-size = <0x0 0x200000>;
 	};
 };

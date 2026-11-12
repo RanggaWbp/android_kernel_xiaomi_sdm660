@@ -565,11 +565,13 @@
 		compatible = "ramoops";
 		memory-region = <&ramoops_mem>;
 		/* Zone layout must match longcheer-sdm660-ramoops.dtsi:
-		 * 64-bit cells or ramoops_parse_dt_size() fails with
-		 * -EOVERFLOW and the whole probe is lost.
+		 * console 2 MiB at offset 0 + pmsg 2 MiB, no dumps zone --
+		 * recovery (TWRP) validates each zone by signature and reads
+		 * the console ring at offset 0, so any other layout leaves
+		 * /sys/fs/pstore empty. 64-bit cells or
+		 * ramoops_parse_dt_size() fails with -EOVERFLOW.
 		 */
-		record-size = <0x0 0x200000>;
-		console-size = <0x0 0x100000>;
-		pmsg-size = <0x0 0x100000>;
+		console-size = <0x0 0x200000>;
+		pmsg-size = <0x0 0x200000>;
 	};
 };
