@@ -1,8 +1,8 @@
 diff --git a/kernel/src/nomount.c b/kernel/src/nomount.c
-index 5ad954e..e324159 100644
+index 1d16c65..48bc6df 100644
 --- a/kernel/src/nomount.c
 +++ b/kernel/src/nomount.c
-@@ -651,6 +651,7 @@ static int nm_setattr(IDMAP_ARG struct dentry *dentry, struct iattr *attr)
+@@ -824,6 +824,7 @@ static int nm_setattr(IDMAP_ARG struct dentry *dentry, struct iattr *attr)
      return err;
  }
  
@@ -10,7 +10,7 @@ index 5ad954e..e324159 100644
  static const char *nm_get_link(struct dentry *dentry, struct inode *inode, struct delayed_call *done)
  {
      struct nm_inode_info *info = inode->i_private;
-@@ -666,6 +667,21 @@ static const char *nm_get_link(struct dentry *dentry, struct inode *inode, struc
+@@ -839,6 +840,21 @@ static const char *nm_get_link(struct dentry *dentry, struct inode *inode, struc
  
      return ERR_PTR(-EINVAL);
  }
@@ -32,7 +32,7 @@ index 5ad954e..e324159 100644
  
  static int nm_dir_iterate_dir(struct file *file, struct dir_context *ctx)
  {
-@@ -757,16 +773,23 @@ struct nm_xattr_proxy {
+@@ -922,16 +938,23 @@ struct nm_xattr_proxy {
      const struct xattr_handler *orig;
  };
  
@@ -59,11 +59,12 @@ index 5ad954e..e324159 100644
  }
  
  #ifdef NM_HAS_XATTR__GET
-@@ -786,15 +809,22 @@ static int nm_xattr__get(const struct xattr_handler *handler, struct dentry *den
+@@ -951,22 +974,24 @@ static int nm_xattr__get(const struct xattr_handler *handler, struct dentry *den
  }
  #endif
  
--static int nm_xattr_set(const struct xattr_handler *handler, IDMAP_ARG struct dentry *dentry, struct inode *inode, const char *name, const void *buffer, size_t size, int flags)
+-static int nm_xattr_set(const struct xattr_handler *handler, IDMAP_ARG struct dentry *dentry,
+-                        struct inode *inode, const char *name, const void *buffer, size_t size, int flags)
 +static int nm_xattr_set(const struct xattr_handler *handler, IDMAP_ARG struct dentry *dentry
 +#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)
 +                        , struct inode *inode
@@ -76,16 +77,22 @@ index 5ad954e..e324159 100644
 +#endif
      if (nm_inode_is_virtual(inode)) {
          struct nm_inode_info *info = inode->i_private;
+         const char *full_name;
+ 
          if (unlikely(!info || !info->r_path.dentry)) return -ENODATA;
--        return __vfs_setxattr(IDMAP_PATH(info->r_path) info->r_path.dentry, d_inode(info->r_path.dentry), xattr_full_name(handler, name), buffer, size, flags);
+-        if (sb_rdonly(d_backing_inode(info->r_path.dentry)->i_sb)) return -EROFS;
+-        full_name = xattr_full_name(handler, name);
+-        if (buffer)
+-            return vfs_setxattr(IDMAP_PATH(info->r_path) info->r_path.dentry, full_name, buffer, size, flags);
+-        return vfs_removexattr(IDMAP_PATH(info->r_path) info->r_path.dentry, full_name);
 +        return nm_vfs_setxattr(info->r_path.dentry, d_inode(info->r_path.dentry), xattr_full_name(handler, name), buffer, size, flags);
      }
 -    return proxy->orig->set(proxy->orig, IDMAP_CALL dentry, inode, name, buffer, size, flags);
 +    return NM_ORIG_SET(proxy, dentry, inode, name, buffer, size, flags);
  }
  
- static int nm_d_revalidate_common(struct inode *parent_inode, const struct qstr *name,
-@@ -909,7 +939,11 @@ static const struct inode_operations nm_file_iops = {
+ static int nm_shutdown_sync_fs(struct super_block *sb, int wait)
+@@ -1114,7 +1139,11 @@ static const struct inode_operations nm_file_iops = {
      .getattr = nm_getattr,
      .setattr = nm_setattr,
      .listxattr = nm_listxattr,
@@ -97,7 +104,7 @@ index 5ad954e..e324159 100644
  };
  
  static const struct file_operations nm_dir_fops = {
-@@ -918,7 +952,9 @@ static const struct file_operations nm_dir_fops = {
+@@ -1123,7 +1152,9 @@ static const struct file_operations nm_dir_fops = {
      .release = nm_release,
      .llseek = default_llseek,
      .read = generic_read_dir,
@@ -107,10 +114,14 @@ index 5ad954e..e324159 100644
  #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
      .iterate = nm_dir_iterate_dir,
  #endif
-@@ -987,11 +1023,14 @@ static inline int nm_hijack_dir_ops(struct nm_dir_node *dir_node, struct inode *
-     const struct file_operations *fop = smp_load_acquire(&inode->i_fop);
-     struct nm_dir_ops *ops;
+@@ -1205,15 +1236,14 @@ static inline int nm_hijack_dir_ops(struct nm_dir_node *dir_node, struct inode *
+     const struct inode_operations *iop = smp_load_acquire(&inode->i_op);
+     struct nm_dir_ops *ops = nm_get_nm_iop(iop);
      int err;
+-
+-    if (ops) return ops->dir_node == dir_node ? 0 : -EBUSY;
+-    const struct file_operations *fop = smp_load_acquire(&inode->i_fop);
+-    if ((ops = nm_get_nm_fop(fop))) return ops->dir_node == dir_node ? 0 : -EBUSY;
 -    bool iterate = fop && (fop->iterate_shared
 +    bool iterate = fop && (
 +#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
@@ -123,9 +134,9 @@ index 5ad954e..e324159 100644
 -    );
 +        false);
  
-     if ((ops = nm_get_nm_iop(iop)) || (ops = nm_get_nm_fop(fop))) {
-         if (ops->dir_node != dir_node) return -EBUSY;
-@@ -1015,7 +1054,9 @@ static inline int nm_hijack_dir_ops(struct nm_dir_node *dir_node, struct inode *
+     if (!iop && !iterate) return -EOPNOTSUPP;
+     if (!(ops = kmalloc(sizeof(*ops), GFP_KERNEL))) return -ENOMEM;
+@@ -1236,7 +1266,9 @@ static inline int nm_hijack_dir_ops(struct nm_dir_node *dir_node, struct inode *
      if (fop) {
          ops->fake_fop = *fop;
          ops->fake_fop.owner = THIS_MODULE;
@@ -136,7 +147,7 @@ index 5ad954e..e324159 100644
          if (fop->iterate) ops->fake_fop.iterate = nm_hijacked_iterate_dir;
  #endif
 diff --git a/kernel/src/nomount.h b/kernel/src/nomount.h
-index c850611..ec141e4 100644
+index febf604..f71b1f7 100644
 --- a/kernel/src/nomount.h
 +++ b/kernel/src/nomount.h
 @@ -16,6 +16,26 @@
@@ -163,10 +174,10 @@ index c850611..ec141e4 100644
 +#endif
 +/* ===== end 4.4 compat shims ===== */
 +
- #define NOMOUNT_BASE_VERSION "22"
+ #define NOMOUNT_BASE_VERSION "23"
  #ifdef NOMOUNT_COMMIT_COUNT
      #define NOMOUNT_VERSION ""NOMOUNT_BASE_VERSION" ("NOMOUNT_COMMIT_COUNT")"
-@@ -393,10 +413,12 @@ static inline void nm_sync_inode_times(struct inode *v_inode, struct inode *r_in
+@@ -416,10 +436,12 @@ static inline void nm_sync_inode_times(struct inode *v_inode, struct inode *r_in
  
  static inline int nm_call_iterate(struct file *file, struct dir_context *ctx, const struct file_operations *fop)
  {
@@ -180,7 +191,7 @@ index c850611..ec141e4 100644
          return fop->iterate(file, ctx);
  #endif
      return -ENOTDIR;
-@@ -415,8 +437,10 @@ static inline struct nm_dir_ops *nm_get_nm_iop(const struct inode_operations *io
+@@ -438,8 +460,10 @@ static inline struct nm_dir_ops *nm_get_nm_iop(const struct inode_operations *io
  
  static inline struct nm_dir_ops *nm_get_nm_fop(const struct file_operations *fop) {
      if (unlikely(!fop)) return NULL;
