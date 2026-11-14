@@ -111,6 +111,46 @@ jobs:
             defconfig: whyred_latency_defconfig
             device_name2: ""
             is_slot_device: "0"
+          - device: tulip
+            profile: normal
+            codename: tulip
+            dtb_basename: sdm636-mtp-tulip
+            dtb_model: "MTP E7T"
+            dtb_board_id: "262152 0"
+            display_name: "Redmi Note 6 Pro (tulip)"
+            defconfig: tulip_defconfig
+            device_name2: ""
+            is_slot_device: "0"
+          - device: tulip
+            profile: oc_cpu_latency
+            codename: tulip
+            dtb_basename: sdm636-mtp-tulip
+            dtb_model: "MTP E7T"
+            dtb_board_id: "262152 0"
+            display_name: "Redmi Note 6 Pro (tulip)"
+            defconfig: tulip_latency_defconfig
+            device_name2: ""
+            is_slot_device: "0"
+          - device: lavender
+            profile: normal
+            codename: lavender
+            dtb_basename: sdm660-mtp-lavender
+            dtb_model: "MTP F7A"
+            dtb_board_id: "131080 0"
+            display_name: "Redmi Note 7 (lavender)"
+            defconfig: lavender_defconfig
+            device_name2: ""
+            is_slot_device: "0"
+          - device: lavender
+            profile: oc_cpu_latency
+            codename: lavender
+            dtb_basename: sdm660-mtp-lavender
+            dtb_model: "MTP F7A"
+            dtb_board_id: "131080 0"
+            display_name: "Redmi Note 7 (lavender)"
+            defconfig: lavender_latency_defconfig
+            device_name2: ""
+            is_slot_device: "0"
 
     env:
       CONF_FILE: configs/${{ matrix.device }}/${{ matrix.profile }}.conf
@@ -768,11 +808,11 @@ jobs:
           ls -la zips
           COUNT=$(ls -1 zips/*.zip 2>/dev/null | wc -l)
           echo "collected ${COUNT} zip(s)"
-          # 4 = 2 device x 2 profile (normal + oc_cpu_latency).
+          # 8 = 4 device x 2 profile (normal + oc_cpu_latency).
           # Gagal keras kalau ada yang hilang, supaya release tidak pernah
           # terbit dengan zip tidak lengkap.
-          if [ "$COUNT" -ne 4 ]; then
-            echo "::error::expected 4 zips (2 devices x normal/oc_cpu_latency), got ${COUNT}"
+          if [ "$COUNT" -ne 8 ]; then
+            echo "::error::expected 8 zips (4 devices x normal/oc_cpu_latency), got ${COUNT}"
             exit 1
           fi
 
@@ -780,7 +820,9 @@ jobs:
         run: |
           rc=0
           for want in TanpaNama-mi6x TanpaNama-mi6x-OC \
-                      TanpaNama-whyred TanpaNama-whyred-OC; do
+                      TanpaNama-whyred TanpaNama-whyred-OC \
+                      TanpaNama-tulip TanpaNama-tulip-OC \
+                      TanpaNama-lavender TanpaNama-lavender-OC; do
             if ls zips/${want}-*.zip >/dev/null 2>&1; then
               echo "OK   ${want}"
             else
@@ -834,6 +876,8 @@ jobs:
             | :----- | :------- | :--- |
             | Xiaomi Mi 6X | `wayne` | A-only |
             | Xiaomi Redmi Note 5 | `whyred` | A-only |
+            | Xiaomi Redmi Note 6 Pro | `tulip` | A-only |
+            | Xiaomi Redmi Note 7 | `lavender` | A-only |
 
             ## Variants
 
@@ -841,8 +885,10 @@ jobs:
             | :------ | :------ | :-------------- | :------ | :--- |
             | wayne | `normal` | stock (efuse speed-bin) | stock (300Hz, default tunables) | none |
             | wayne | `cpu-latency-oc` | 2.46 GHz (forced speed-bin 0) | 1000Hz tick + halved sched tunables | HIGH |
-            | whyred | `normal` | stock (efuse speed-bin) | stock | none |
+            | whyred / tulip / lavender | `normal` | stock (efuse speed-bin) | stock | none |
             | whyred | `cpu-latency-oc` | 2.46 GHz (forced speed-bin 0) | 1000Hz tick + halved sched tunables | HIGH |
+            | tulip | `cpu-latency-oc` | 2.46 GHz (forced speed-bin 0) | 1000Hz tick + halved sched tunables | HIGH |
+            | lavender | `cpu-latency-oc` | 2.46 GHz (forced speed-bin 0) | 1000Hz tick + halved sched tunables | HIGH |
 
             > The OC profile forces the best-binned LUT onto silicon that may be
             > binned lower. Keep a boot backup ready. The latency profile lowers
