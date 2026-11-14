@@ -150,10 +150,22 @@ index 1d16c65..ab85f45 100644
          if (fop->iterate) ops->fake_fop.iterate = nm_hijacked_iterate_dir;
  #endif
 diff --git a/kernel/src/nomount.h b/kernel/src/nomount.h
-index febf604..f855109 100644
+index febf604..8babb71 100644
 --- a/kernel/src/nomount.h
 +++ b/kernel/src/nomount.h
-@@ -371,6 +371,17 @@ struct nm_del_hdr {
+@@ -16,6 +16,11 @@
+ #include <linux/version.h>
+ #include <linux/compat.h>
+ 
++/* 4.4/4.5: in_compat_syscall tak ada; is_compat_task() = (0) */
++#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 6, 0)
++# define in_compat_syscall() is_compat_task()
++#endif
++
+ #define NOMOUNT_BASE_VERSION "23"
+ #ifdef NOMOUNT_COMMIT_COUNT
+     #define NOMOUNT_VERSION ""NOMOUNT_BASE_VERSION" ("NOMOUNT_COMMIT_COUNT")"
+@@ -371,6 +376,16 @@ struct nm_del_hdr {
  #define sb_rdonly(sb) ((sb)->s_flags & MS_RDONLY)
  #endif
  
@@ -165,13 +177,12 @@ index febf604..f855109 100644
 +/* 4.4/4.5: full_name_hash masih 2-arg (salted di 4.6+); in_compat_syscall tak ada */
 +#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 6, 0)
 +# define full_name_hash(salt, name, len) full_name_hash((name), (len))
-+# define in_compat_syscall() is_compat_task()
 +#endif
 +
  #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0) && LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0)
      #define FLAGS_ARG , int flags
      #define FLAGS_VAL , flags
-@@ -385,6 +396,12 @@ struct nm_del_hdr {
+@@ -385,6 +400,12 @@ struct nm_del_hdr {
  # define nm_lookup_one_len_unlocked lookup_one_len_unlocked
  #endif
  
@@ -184,7 +195,7 @@ index febf604..f855109 100644
  #ifndef for_each_alias
  #define for_each_alias(dentry, inode) \
      hlist_for_each_entry(dentry, &(inode)->i_dentry, d_u.d_alias)
-@@ -416,10 +433,12 @@ static inline void nm_sync_inode_times(struct inode *v_inode, struct inode *r_in
+@@ -416,10 +437,12 @@ static inline void nm_sync_inode_times(struct inode *v_inode, struct inode *r_in
  
  static inline int nm_call_iterate(struct file *file, struct dir_context *ctx, const struct file_operations *fop)
  {
@@ -198,7 +209,7 @@ index febf604..f855109 100644
          return fop->iterate(file, ctx);
  #endif
      return -ENOTDIR;
-@@ -438,8 +457,10 @@ static inline struct nm_dir_ops *nm_get_nm_iop(const struct inode_operations *io
+@@ -438,8 +461,10 @@ static inline struct nm_dir_ops *nm_get_nm_iop(const struct inode_operations *io
  
  static inline struct nm_dir_ops *nm_get_nm_fop(const struct file_operations *fop) {
      if (unlikely(!fop)) return NULL;
