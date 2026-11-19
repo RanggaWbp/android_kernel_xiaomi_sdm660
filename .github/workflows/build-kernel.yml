@@ -641,6 +641,18 @@ jobs:
           git checkout "$AK3_COMMIT" || { echo "::error::AnyKernel3 pin $AK3_COMMIT tidak bisa di-checkout"; exit 1; }
           [ "$(git rev-parse HEAD)" = "$(git rev-parse "$AK3_COMMIT")" ] || { echo "::error::AnyKernel3 bukan di pin $AK3_COMMIT"; exit 1; }
           rm -rf ramdisk patch tools/keycheck
+          # Tools 32-bit (armeabi-v7a) dari AK3 sering gagal unpack ramdisk pada
+          # boot image AOSP modern (header v4 / format ramdisk baru) — contoh
+          # lavender. Recovery sdm660 modern (OrangeFox/TWRP) semuanya 64-bit,
+          # jadi bundle versi arm64: dari Magisk v31.1 APK (lib/arm64-v8a).
+          curl -sSL -o /tmp/magisk.apk https://github.com/topjohnwu/Magisk/releases/download/v31.1/Magisk-v31.1.apk
+          unzip -o -j /tmp/magisk.apk \
+            lib/arm64-v8a/libmagiskboot.so -d tools/ && mv tools/libmagiskboot.so tools/magiskboot
+          unzip -o -j /tmp/magisk.apk \
+            lib/arm64-v8a/libmagiskpolicy.so -d tools/ && mv tools/libmagiskpolicy.so tools/magiskpolicy
+          unzip -o -j /tmp/magisk.apk \
+            lib/arm64-v8a/libbusybox.so -d tools/ && mv tools/libbusybox.so tools/busybox
+          chmod +x tools/magiskboot tools/magiskpolicy tools/busybox
           cp ../kernel/out/arch/arm64/boot/Image.gz-dtb .
 
           RISK_LEVEL="$(grep -E '^RISK_LEVEL=' "../oc-config/${{ env.CONF_FILE }}" | cut -d= -f2 || true)"
