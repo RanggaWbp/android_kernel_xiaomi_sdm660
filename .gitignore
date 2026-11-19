@@ -37,6 +37,8 @@
 !scripts/nomount/*.patch
 # Same for the KernelSU SUSFS guard patch.
 !scripts/ksu/*.patch
+# Same for the KernelSU SUSFS CMD dispatch patch.
+!scripts/susfs/*.patch
 *.gcno
 *.ll
 modules.builtin

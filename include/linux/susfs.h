@@ -167,6 +167,14 @@ struct st_susfs_priority_uid_filter {
 };
 #endif // #ifdef CONFIG_KSU_SUSFS
 
+/* sus_path uid filter */
+#ifdef CONFIG_KSU_SUSFS
+struct st_susfs_sus_path_uid_filter {
+	char                                    app_strings[SUSFS_APP_STR_BUF_SIZE];
+	int                                     err;
+};
+#endif // #ifdef CONFIG_KSU_SUSFS
+
 /* avc log spoofing */
 struct st_susfs_avc_log_spoofing {
 	bool                                    enabled;
@@ -198,6 +206,8 @@ struct st_susfs_version {
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 void susfs_add_sus_path(void __user **user_info);
 void susfs_add_sus_path_loop(void __user **user_info);
+void susfs_set_sus_path_uid_filter(void __user **user_info);
+void susfs_parse_sus_path_app_strings(void);
 #endif
 
 /* sus_mount */

@@ -239,6 +239,13 @@ jobs:
         working-directory: kernel
         run: bash scripts/apply_ksu_susfs_unsuspend.sh KernelSU
 
+      # sus_path_uid_filter CMD (CMD_SUSFS_SET_SUS_PATH_UID_FILTER) is
+      # dispatched in KernelSU/kernel/supercall/dispatch.c, which BakaSU
+      # upstream does not carry for this tree. Apply it at build time.
+      - name: Apply susfs CMD dispatch patch
+        working-directory: kernel
+        run: bash scripts/apply_susfs_cmd.sh KernelSU
+
       - name: Add priority UID filter dispatch to KernelSU submodule
         working-directory: kernel
         run: bash scripts/apply_ksu_susfs_priority_uid_filter.sh KernelSU
