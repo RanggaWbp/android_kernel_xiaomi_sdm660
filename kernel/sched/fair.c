@@ -8685,6 +8685,9 @@ enum group_type {
 /* This balance operation has detached at least one task. Sticky across the
  * more_balance retries, so it reflects the whole operation, not one scan. */
 #define LBF_MOVED	0x20
+/* sched_balance_rq() redirected this operation from a CPU the tasks could not
+ * run on to another CPU of the same group (LBF_DST_PINNED -> new_dst_cpu). */
+#define LBF_DST_REDIRECTED	0x40
 #define LBF_BIG_TASK_ACTIVE_BALANCE 0x80
 #define LBF_IGNORE_BIG_TASKS 0x100
 #define LBF_IGNORE_PREFERRED_CLUSTER_TASKS 0x200
@@ -8975,7 +8978,7 @@ static struct task_struct *detach_one_task(struct lb_env *env)
 #define SCHED_CAMBYSES_AUTHOR	"Masahito Suzuki"
 #define SCHED_CAMBYSES_PROGNAME	"Cambyses CFS Load Balancer modification"
 
-#define SCHED_CAMBYSES_VERSION	"0.6.0"
+#define SCHED_CAMBYSES_VERSION	"0.7.2"
 
 static int __init sched_cambyses_init(void)
 {
@@ -9017,21 +9020,53 @@ static inline unsigned long shr_bound(unsigned long val, int shift)
 }
 
 /*
+ * Is this balance operation in a state where the cheapest overshoot should
+ * be conceded to?  Only a balance pulling into an idle CPU: handing it work
+ * is a win even when the task overshoots, as long as the overshoot still
+ * shrinks the imbalance.  A busy destination gains nothing from an overshoot
+ * but can flip the imbalance and bounce the task back, so it keeps the
+ * upstream relaxation, which concedes only after failures have been recorded.
+ *
+ * Not after a redirect.  When the tasks cannot run on the idle CPU that asked
+ * for them, sched_balance_rq() retries towards another CPU of its group, but
+ * env->idle still describes the CPU that asked.  The new destination is
+ * normally busy, so an overshoot there is exactly what the idle-only rule
+ * exists to prevent.
+ */
+static inline bool lb_concede_cheapest(struct lb_env *env)
+{
+	return sched_feat(LB_CONCEDE_CHEAPEST) && env->idle != CPU_NOT_IDLE &&
+	       !(env->flags & LBF_DST_REDIRECTED);
+}
+
+/*
  * Does moving @p, costing @cost, fit the remaining imbalance budget?
  *
- * LB_STRICT_BUDGET compares directly and notes the smallest overshoot seen so
- * far.  Upstream instead relaxes the comparison by sd->nr_balance_failed; see
- * features.h for why that relaxation is unreachable while cheaper candidates
+ * LB_CONCEDE_CHEAPEST compares directly and notes the smallest overshoot seen
+ * so far.  Upstream instead relaxes the comparison by sd->nr_balance_failed;
+ * see features.h for why that relaxation is unreachable while cheaper candidates
  * keep succeeding.
+ *
+ * An overshoot is noted only if moving it still shrinks the imbalance:
+ * moving @cost against an imbalance I leaves |I - cost|, which is smaller
+ * than I only while cost < 2 * I.  This also rules out a bounce.
  */
 static bool lb_cost_fits(struct lb_env *env, struct lb_concession *concession,
 			 struct task_struct *p, unsigned long cost)
 {
-	if (!sched_feat(LB_STRICT_BUDGET))
+	if (!lb_concede_cheapest(env))
 		return shr_bound(cost, env->sd->nr_balance_failed) <= env->imbalance;
 
 	if (cost <= env->imbalance)
 		return true;
+
+	/*
+	 * cost < 2 * imbalance, written so it cannot overflow.  imbalance is
+	 * positive here (detach_tasks() stops once it is not) and cost
+	 * exceeds it, so the subtraction cannot wrap.
+	 */
+	if (cost - env->imbalance >= env->imbalance)
+		return false;
 
 	if (!concession->p || cost < concession->cost) {
 		concession->p = p;
@@ -10829,6 +10864,7 @@ more_balance:
 			env.dst_rq	 = cpu_rq(env.new_dst_cpu);
 			env.dst_cpu	 = env.new_dst_cpu;
 			env.flags	&= ~LBF_DST_PINNED;
+			env.flags	|= LBF_DST_REDIRECTED;
 			env.loop	 = 0;
 			env.loop_break	 = sched_nr_migrate_break;
 

@@ -876,7 +876,7 @@ jobs:
             | **EAS** | Energy-aware scheduling |
             | **DroidSpaces** | LXC/Docker container support (namespaces, cgroups, IPv4/IPv6 NAT) |
             | **BORE** | Burst-Oriented Response Enhancer scheduler |
-            | **CAMBYSES** | CFS load-balancer tweak (O(1) block rotate + strict-budget idle picker) |
+            | **CAMBYSES** | CFS load-balancer tweak (O(1) block rotate + concede-cheapest idle picker) |
             | **POC-Selector** | O(1) idle CPU picker (`kernel.sched_poc_*` static keys, all on) |
             | **REFLEX** | schedutil-derived cpufreq governor (selectable, schedutil boot default) |
             | **ADIOS** | Adaptive Deadline I/O scheduler -- boot default (`adios`) |

@@ -114,6 +114,15 @@ SCHED_FEAT(LB_ROTATE_BLOCK, true)
  * first scan that admits nothing rather than once enough failures have been
  * recorded.
  *
+ * The concession is limited to overshoots that still shrink the imbalance,
+ * cost < 2 * imbalance.  A larger one would flip the imbalance and let the
+ * reverse balance pull a task straight back.
+ *
+ * Applies only when the balance pulls into an idle CPU (env->idle !=
+ * CPU_NOT_IDLE).  Handing an idle CPU work is worth an overshoot; for a busy
+ * destination an overshoot can flip the imbalance and bounce the task back,
+ * so it keeps the upstream relaxation.
+ *
  * Turn off to get the upstream shr_bound() relaxation.
  */
-SCHED_FEAT(LB_STRICT_BUDGET, true)
+SCHED_FEAT(LB_CONCEDE_CHEAPEST, true)
