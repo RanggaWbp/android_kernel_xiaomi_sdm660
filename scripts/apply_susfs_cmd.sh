@@ -18,6 +18,16 @@ PATCH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/susfs/susfs-disp
 [ -f "$SUB/kernel/supercall/dispatch.c" ] || { echo "::error::$SUB/kernel/supercall/dispatch.c missing (submodule not checked out?)"; exit 1; }
 [ -f "$PATCH" ] || { echo "::error::patch not found: $PATCH"; exit 1; }
 
+# Upstream BakaSU now carries both CMD_SUSFS_SET_SUS_PATH_UID_FILTER and
+# CMD_SUSFS_SET_PRIORITY_UID_FILTER natively in dispatch.c -- when both are
+# present, no patch is needed at all. Only fall back to the patch when they
+# are absent from the submodule HEAD.
+if grep -q 'CMD_SUSFS_SET_SUS_PATH_UID_FILTER' "$SUB/kernel/supercall/dispatch.c" \
+   && grep -q 'CMD_SUSFS_SET_PRIORITY_UID_FILTER' "$SUB/kernel/supercall/dispatch.c"; then
+    echo "susfs CMD dispatch cases already present natively -- skipping."
+    exit 0
+fi
+
 if git -C "$SUB" apply --reverse --check "$PATCH" 2>/dev/null; then
     echo "susfs CMD dispatch patch already applied -- skipping."
     exit 0
