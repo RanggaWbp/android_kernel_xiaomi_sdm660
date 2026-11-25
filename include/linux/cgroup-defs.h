@@ -62,6 +62,12 @@ enum {
 	 * specified at mount time and thus is implemented here.
 	 */
 	CGRP_CPUSET_CLONE_CHILDREN,
+
+	/* Control group has to be frozen. */
+	CGRP_FREEZE,
+
+	/* Cgroup is frozen. */
+	CGRP_FROZEN,
 };
 
 /* cgroup_root->flags */
@@ -222,6 +228,29 @@ struct css_set {
 	struct rcu_head rcu_head;
 };
 
+
+/*
+ * cgroup v2 freezer state
+ */
+struct cgroup_freezer_state {
+	/* Should the cgroup and its descendants be frozen. */
+	bool freeze;
+
+	/* Should the cgroup actually be frozen? */
+	int e_freeze;
+
+	/* Fields below are protected by css_set_lock */
+
+	/* Number of frozen descendant cgroups */
+	int nr_frozen_descendants;
+
+	/*
+	 * Number of tasks, which are counted as frozen:
+	 * frozen, SIGSTOPped, and PTRACEd.
+	 */
+	int nr_frozen_tasks;
+};
+
 struct cgroup {
 	/* self css with NULL ->ss, points back to this cgroup */
 	struct cgroup_subsys_state self;
@@ -245,6 +274,16 @@ struct cgroup {
 	 * task in this cgroup or its subtree.
 	 */
 	int populated_cnt;
+
+	/*
+	 * Keep track of total numbers of visible and dying descent cgroups.
+	 * Dying cgroups are cgroups which were deleted by a user,
+	 * but are still existing because someone else is holding a reference.
+	 * max_descendants is a maximum allowed number of descent cgroups.
+	 */
+	int nr_descendants;
+	int nr_dying_descendants;
+	int max_descendants;
 
 	struct kernfs_node *kn;		/* cgroup kernfs entry */
 	struct cgroup_file procs_file;	/* handle for "cgroup.procs" */
@@ -293,6 +332,9 @@ struct cgroup {
 
 	/* used to schedule release agent */
 	struct work_struct release_agent_work;
+
+	/* Used to store internal freezer state */
+	struct cgroup_freezer_state freezer;
 };
 
 /*

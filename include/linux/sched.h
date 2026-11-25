@@ -1764,6 +1764,9 @@ struct task_struct {
 	int pdeath_signal;  /*  The signal sent when the parent dies  */
 	unsigned long jobctl;	/* JOBCTL_*, siglock protected */
 
+	/* Used for cgroup v2 freezer */
+	bool frozen;
+
 	/* Used for emulating ABI behavior of previous Linux versions */
 	unsigned int personality;
 
@@ -2548,6 +2551,7 @@ TASK_PFA_SET(SPEC_IB_FORCE_DISABLE, spec_ib_force_disable)
 #define JOBCTL_TRAP_NOTIFY_BIT	20	/* trap for NOTIFY */
 #define JOBCTL_TRAPPING_BIT	21	/* switching to TRACED */
 #define JOBCTL_LISTENING_BIT	22	/* ptracer is listening for events */
+#define JOBCTL_TRAP_FREEZE_BIT	23	/* trap for cgroup freezer */
 
 #define JOBCTL_STOP_DEQUEUED	(1UL << JOBCTL_STOP_DEQUEUED_BIT)
 #define JOBCTL_STOP_PENDING	(1UL << JOBCTL_STOP_PENDING_BIT)
@@ -2556,6 +2560,7 @@ TASK_PFA_SET(SPEC_IB_FORCE_DISABLE, spec_ib_force_disable)
 #define JOBCTL_TRAP_NOTIFY	(1UL << JOBCTL_TRAP_NOTIFY_BIT)
 #define JOBCTL_TRAPPING		(1UL << JOBCTL_TRAPPING_BIT)
 #define JOBCTL_LISTENING	(1UL << JOBCTL_LISTENING_BIT)
+#define JOBCTL_TRAP_FREEZE	(1UL << JOBCTL_TRAP_FREEZE_BIT)
 
 #define JOBCTL_TRAP_MASK	(JOBCTL_TRAP_STOP | JOBCTL_TRAP_NOTIFY)
 #define JOBCTL_PENDING_MASK	(JOBCTL_STOP_PENDING | JOBCTL_TRAP_MASK)
