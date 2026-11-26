@@ -860,8 +860,6 @@ jobs:
           fail_on_unmatched_files: true
           files: zips/*.zip
           body: |
-            # Custom OC Kernel — Mi 6X
-
             Linux 4.4 (Non-GKI) · ARM64 · commits [`${{ github.sha }}`](https://github.com/RanggaWbp/android_kernel_xiaomi_sdm660/commit/${{ github.sha }})
 
             ## Features
