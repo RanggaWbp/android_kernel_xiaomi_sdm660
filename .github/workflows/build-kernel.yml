@@ -619,11 +619,6 @@ jobs:
 
       # ---------------------------------------------------------------
       # 9. PACKAGE AnyKernel3 -- siap flash langsung, tanpa ekstrak.
-      #    Tag BakaSU + SUSFS dicantumkan di kernel.string biar keliatan
-      #    di recovery/flasher app. kernel.string juga memuat versi persis
-      #    BakaSU *yang benar-benar ter-build di job ini* (dari step
-      #    7b "Capture BakaSU version"), jadi TWRP/KernelFlasher selalu
-      #    menampilkan versi yang sesuai tanpa edit manual.
       # ---------------------------------------------------------------
       - name: Package AnyKernel3 zip
         run: |
@@ -675,7 +670,6 @@ jobs:
           cat > anykernel.sh << EOF
           ### AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=Custom OC Kernel for ${{ matrix.display_name }} (${{ matrix.codename }}) | profile: ${{ matrix.profile }} (risk: ${RISK_LEVEL}) | features: BakaSU ${KSU_TAG} (code ${KSU_CODE}) + SUSFS + Re:Kernel + NoMount + BBG + EAS + BORE + CAMBYSES + POC-Selector + REFLEX + ADIOS + LZ4KDR + le9uo + Re-swappiness + NTSYNC + MGLRU + LMK + BBRv3 + LZ4 + DroidSpaces | by RanggaWbp | ${{ env.BUILD_DATE }}
           do.devicecheck=1
           do.modules=0
           do.systemless=1
@@ -701,7 +695,7 @@ jobs:
           . tools/ak3-core.sh;
           ui_print " ";
           ui_print "============================================================";
-          ui_print "  RanggaWbp OC Kernel - ${{ matrix.display_name }} (${{ matrix.codename }})";
+          ui_print "  RanggaWbp OC Kernel - ${{ matrix.codename }}";
           ui_print "============================================================";
           ui_print "  profile : ${{ matrix.profile }}";
           ui_print "  risk    : ${RISK_LEVEL}";
@@ -734,7 +728,7 @@ jobs:
           # ini memang sudah support keduanya, jadi tidak perlu edit satu-satu
           # ARTIFACT_NAME= di 10 file conf.
           OC_SUFFIX="${{ matrix.profile == 'oc_cpu_latency' && '-OC' || '' }}"
-          ZIP_NAME="TanpaNama-${{ matrix.device }}${OC_SUFFIX}-BakaSU-SUSFS-${{ env.BUILD_DATE }}-${SHORT_SHA}.zip"
+          ZIP_NAME="TanpaNama-${{ matrix.codename }}${OC_SUFFIX}-BakaSU-SUSFS-${{ env.BUILD_DATE }}-${SHORT_SHA}.zip"
           zip -r9 "../${ZIP_NAME}" . -x ".git/*" ".github/*" "*.md"
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
@@ -755,7 +749,7 @@ jobs:
       - name: Upload zip as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zip-${{ matrix.device }}-${{ matrix.profile }}
+          name: zip-${{ matrix.codename }}-${{ matrix.profile }}
           path: ${{ env.ZIP_NAME }}
           retention-days: 30
 
@@ -764,7 +758,7 @@ jobs:
       - name: Upload BakaSU version file as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ksu-version-${{ matrix.device }}-${{ matrix.profile }}
+          name: ksu-version-${{ matrix.codename }}-${{ matrix.profile }}
           path: kernel/ksu-version-${{ matrix.device }}-${{ matrix.profile }}.env
           retention-days: 30
 
@@ -838,7 +832,7 @@ jobs:
       - name: Verify every expected zip is present
         run: |
           rc=0
-          for want in TanpaNama-mi6x TanpaNama-mi6x-OC \
+          for want in TanpaNama-wayne TanpaNama-wayne-OC \
                       TanpaNama-whyred TanpaNama-whyred-OC \
                       TanpaNama-tulip TanpaNama-tulip-OC \
                       TanpaNama-lavender TanpaNama-lavender-OC; do
@@ -860,8 +854,6 @@ jobs:
           fail_on_unmatched_files: true
           files: zips/*.zip
           body: |
-            # Custom OC Kernel — Mi 6X
-
             Linux 4.4 (Non-GKI) · ARM64 · commits [`${{ github.sha }}`](https://github.com/RanggaWbp/android_kernel_xiaomi_sdm660/commit/${{ github.sha }})
 
             ## Features
