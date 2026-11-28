@@ -11,35 +11,8 @@ name: Build OC Kernel (mi6x)
 # run sebelumnya. Zip AnyKernel3 sudah flash-ready (tidak perlu ekstrak),
 # sha256/metadata/log dibuang dari output karena dianggap tidak penting.
 on:
-  push:
-    branches: [ master ]
-    paths:
-      # Build inputs (profiles, patches, override scripts).
-      - "configs/**"
-      - "patches/**"
-      - "scripts/apply_oc_overrides.sh"
-      - "scripts/validate_oc_config.sh"
-      - "scripts/**"
-      # Kernel source that carries the BakaSU/SUSFS/Re:Kernel/BBG/NoMount
-      # integration. Without these, a kernel fix (e.g. the su/stat redirect)
-      # would never produce a new flashable release -- that is exactly why the
-      # su fix had to be released manually via workflow_dispatch.
-      - "fs/**"
-      - "kernel/**"
-      - "drivers/**"
-      - "security/**"
-      - "mm/**"
-      - "ipc/**"
-      - "net/**"
-      - "include/**"
-      - "Makefile"
-      - "arch/arm64/**"
-      - "arch/arm/**"
-      - "KernelSU"
-      - "Baseband-guard/**"
-      # The workflows themselves.
-      - ".github/workflows/build-kernel.yml"
   workflow_dispatch: {}
+
 
 permissions:
   contents: write   # perlu write untuk bikin/isi GitHub Release
